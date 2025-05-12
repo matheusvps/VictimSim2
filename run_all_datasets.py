@@ -4,6 +4,16 @@ import subprocess
 import time
 from datetime import datetime
 import sys
+import threading
+from pynput.keyboard import Key, Controller
+
+def send_enter():
+    # Aguarda um momento para garantir que a simulação terminou
+    time.sleep(2)
+    # Simula o pressionamento da tecla ENTER
+    keyboard = Controller()
+    keyboard.press(Key.enter)
+    keyboard.release(Key.enter)
 
 def run_simulation(dataset_path, config_path):
     print(f"\n{'='*80}")
@@ -11,12 +21,17 @@ def run_simulation(dataset_path, config_path):
     print(f"{'='*80}\n")
     
     # Executa o main.py com o dataset atual
-    cmd = ["python3", "mas/main.py", dataset_path, config_path]
+    cmd = ["python", os.path.join("mas", "main.py"), dataset_path, config_path]
     
     # Adiciona os diretórios necessários ao PYTHONPATH
     env = os.environ.copy()
     current_dir = os.path.abspath(os.getcwd())
-    env["PYTHONPATH"] = f"{current_dir}:{os.path.join(current_dir, 'mas')}"
+    env["PYTHONPATH"] = os.pathsep.join([current_dir, os.path.join(current_dir, "mas")])
+    
+    # Inicia um thread para enviar ENTER após a simulação
+    enter_thread = threading.Thread(target=send_enter)
+    enter_thread.daemon = True
+    enter_thread.start()
     
     start_time = time.time()
     process = subprocess.run(cmd, capture_output=True, text=True, env=env)
@@ -28,7 +43,7 @@ def run_simulation(dataset_path, config_path):
     # Gera nome do arquivo de log baseado no dataset
     dataset_name = os.path.basename(dataset_path)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = f"simulation_logs/{dataset_name}_{timestamp}.log"
+    log_file = os.path.join("simulation_logs", f"{dataset_name}_{timestamp}.log")
     
     # Salva o log
     with open(log_file, "w") as f:

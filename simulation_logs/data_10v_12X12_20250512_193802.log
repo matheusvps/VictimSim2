@@ -1,0 +1,8 @@
+Dataset: datasets\data_10v_12X12
+Config: cfg_1
+Tempo de execução: 0.20 segundos
+
+=== Saída ===
+
+=== Erros ===
+Python was not found; run without arguments to install from the Microsoft Store, or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases.
