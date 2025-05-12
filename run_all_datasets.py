@@ -4,16 +4,6 @@ import subprocess
 import time
 from datetime import datetime
 import sys
-import threading
-from pynput.keyboard import Key, Controller
-
-def send_enter():
-    # Aguarda um momento para garantir que a simulação terminou
-    time.sleep(2)
-    # Simula o pressionamento da tecla ENTER
-    keyboard = Controller()
-    keyboard.press(Key.enter)
-    keyboard.release(Key.enter)
 
 def run_simulation(dataset_path, config_path):
     print(f"\n{'='*80}")
@@ -27,11 +17,6 @@ def run_simulation(dataset_path, config_path):
     env = os.environ.copy()
     current_dir = os.path.abspath(os.getcwd())
     env["PYTHONPATH"] = os.pathsep.join([current_dir, os.path.join(current_dir, "mas")])
-    
-    # Inicia um thread para enviar ENTER após a simulação
-    enter_thread = threading.Thread(target=send_enter)
-    enter_thread.daemon = True
-    enter_thread.start()
     
     start_time = time.time()
     process = subprocess.run(cmd, capture_output=True, text=True, env=env)
