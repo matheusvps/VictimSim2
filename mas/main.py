@@ -6,6 +6,7 @@ import time
 from vs.environment import Env
 from explorer import Explorer
 from rescuer import Rescuer
+from vs.constants import VS
 
 def main(data_folder_name, config_ag_folder_name):
    
@@ -24,10 +25,17 @@ def main(data_folder_name, config_ag_folder_name):
 
     # Explorer needs to know rescuer to send the map 
     # that's why rescuer is instatiated before
+    # Direções iniciais para cada explorador:
+    # 0: direita
+    # 2: baixo
+    # 4: esquerda
+    # 6: cima
+    directions = [0, 2, 4, 6]
+    
     for exp in range(1, 5):
         filename = f"explorer_{exp:1d}_config.txt"
         explorer_file = os.path.join(config_ag_folder, filename)
-        Explorer(env, explorer_file, master_rescuer)
+        Explorer(env, explorer_file, master_rescuer, directions[exp-1])
 
     # Run the environment simulator
     env.run()

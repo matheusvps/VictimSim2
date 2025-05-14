@@ -1,32 +1,15 @@
-# Example of a Multiagent system
-This system has 4 explorer agents running depth-first search for exploring the environment and 4 rescuer agents with placeholders for the following functions:
-* **Clustering**: a naive one, based on grouping the found victims according to their quadrants
-* **Sequencing of rescue**: it orders the victims by x coordinates followed by the y coordinates, both in ascending order
-* **Assigning clusters** to the rescuers: it trivially assigns 1 cluster to each rescuer
-* **Breadth-first search** for calculating the paths for rescuing the victims: it departs from the base, goes to each victim, and comes back to the base (it does not control the consumed battery time)
+VictimSim2
+==========
 
-One of the rescuer agents is the master rescuer. It is in charge of synchronizing the explorers at the end of exploration phase. The master collects all the partial maps, unifies them, as well as the data about the found victims. Follow, it instantiates three more rescuer agents all having the same unified map and data about victims.
+A simulator designed for testing search algorithms and other IA techniques in rescue scenarios is utilized within the Artificial Intelligence course at UTFPR, Curitiba. Known as VictimSim2, this simulator is useful for studying catastrophic scenarios within a 2D grid environment, where artificial agents embark on search and rescue missions to locate and aid victims.
 
-To run, reproduce the below structure of folders and files:
+Key features of the simulator
+-----------------------------
 
-* `clusters`      *this folder stores the clusters and sequences of rescue*
-  * cluster1.txt
-  * ...
-  * cluster4.txt
-  * seq1.txt
-  * ...
-  * seq4.txt
-* `cfg_1`        *this folder stores the configuration files of all agents*
-  * explorer_1_config.txt 
-  * ... 
-  * explorer_4_config.txt
-  * rescuer_1_config.txt
-  * ...
-  * rescuer_4_config.txt
-* `vs`
-  * all  .py of the vs folder
-* bfs.py
-* explorer.py
-* **main.py**       *this is the file to be executed, in there you should configure the paths for the datasets and config files*
-* map.py
-* rescuer.py
+- The environment comprises a 2D grid, indexed by coordinates (column, row) or (x, y). The origin is situated at the upper left corner, with the y-axis extending downwards and the x-axis extending towards the right. While the absolute coordinates are accessible solely to the environment simulator, users are encouraged to establish their own coordinate system for the agents.
+- Each cell within the 2D grid is assigned a degree of difficulty for accessibility, ranging from values greater than zero to 100. The maximum value of 100 indicates the presence of an impassable wall, while higher values signify increasingly challenging access. Conversely, values less than or equal to one denote easier entry.
+- The environment accommodates one or more agents, with each agent assigned a customizable color via configuration files.
+- Collision detection is integrated to identify instances where an agent collides with walls or reaches the grid's boundaries, termed as "BUMPED" perception.
+- Agents possess the ability to detect obstacles and grid boundaries within their immediate neighborhood, one step ahead from their current position.
+- Multiple agents can occupy the same cell simultaneously without causing collisions.
+- The simulator regulates the scheduling of each agent based on their state: ACTIVE, IDLE, ENDED, or DEAD. Only active agents are permitted to execute actions, and the simulator manages the allotted execution time for each agent; upon expiry, the agent is considered DEAD.
