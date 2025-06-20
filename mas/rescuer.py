@@ -74,12 +74,11 @@ class Rescuer(AbstAgent):
                 writer.writerow([id, x, y, vs[6], vs[7]])
 
     def cluster_victims(self):
-            """ this method clusters the victims using the K-Means algorithm
-            
-            @returns: a list of clusters where each cluster is a dictionary in the format [vic_id]: ((x,y), [<vs>])
-                      such as vic_id is the victim id, (x,y) is the victim's position, and [<vs>] the list of vital signals
-                      including the severity value and the corresponding label"""
-
+        """ this method clusters the victims using the K-Means algorithm
+        
+        @returns: a list of clusters where each cluster is a dictionary in the format [vic_id]: ((x,y), [<vs>])
+                  such as vic_id is the victim id, (x,y) is the victim's position, and [<vs>] the list of vital signals
+                  including the severity value and the corresponding label"""
 
         vic = self.victims
 
