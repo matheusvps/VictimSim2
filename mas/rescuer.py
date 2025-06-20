@@ -74,55 +74,76 @@ class Rescuer(AbstAgent):
                 writer.writerow([id, x, y, vs[6], vs[7]])
 
     def cluster_victims(self):
-        """ this method does a naive clustering of victims per quadrant: victims in the
-            upper left quadrant compose a cluster, victims in the upper right quadrant, another one, and so on.
+            """ this method clusters the victims using the K-Means algorithm
             
             @returns: a list of clusters where each cluster is a dictionary in the format [vic_id]: ((x,y), [<vs>])
                       such as vic_id is the victim id, (x,y) is the victim's position, and [<vs>] the list of vital signals
                       including the severity value and the corresponding label"""
 
 
-        # Find the upper and lower limits for x and y
-        lower_xlim = sys.maxsize    
-        lower_ylim = sys.maxsize
-        upper_xlim = -sys.maxsize - 1
-        upper_ylim = -sys.maxsize - 1
-
         vic = self.victims
-    
-        for key, values in self.victims.items():
-            x, y = values[0]
-            lower_xlim = min(lower_xlim, x) 
-            upper_xlim = max(upper_xlim, x)
-            lower_ylim = min(lower_ylim, y)
-            upper_ylim = max(upper_ylim, y)
+
+        #randomize centroids to start up K-Means algorithm
+        centroids = dict(random.sample(vic.items(), 4))
+
+        cluster_changed = True
+        number_of_iterations = 4
+        i = 0
         
-        # Calculate midpoints
-        mid_x = lower_xlim + (upper_xlim - lower_xlim) / 2
-        mid_y = lower_ylim + (upper_ylim - lower_ylim) / 2
-        print(f"{self.NAME} ({lower_xlim}, {lower_ylim}) - ({upper_xlim}, {upper_ylim})")
-        print(f"{self.NAME} cluster mid_x, mid_y = {mid_x}, {mid_y}")
     
-        # Divide dictionary into quadrants
-        upper_left = {}
-        upper_right = {}
-        lower_left = {}
-        lower_right = {}
+        # Divide dictionary into clusters
+        cluster0 = {}
+        cluster1 = {}
+        cluster2 = {}
+        cluster3 = {}
         
-        for key, values in self.victims.items():  # values are pairs: ((x,y), [<vital signals list>])
-            x, y = values[0]
-            if x <= mid_x:
-                if y <= mid_y:
-                    upper_left[key] = values
-                else:
-                    lower_left[key] = values
-            else:
-                if y <= mid_y:
-                    upper_right[key] = values
-                else:
-                    lower_right[key] = values
+        while (i < number_of_iterations and cluster_changed == True): #Outer loop
+            cluster_changed = False
+
+            for key, values in self.victims.items():  # values are pairs: ((x,y), [<vital signals list>])
+                
+                x, y = values[0]
+                min_distance = sys.maxsize 
+
+                for c_key, c_values in centroids.items(): #determines the centroid closest to the current victim
+                    
+                    c_x, c_y = c_values[0]
+
+                    delta_x, delta_y = c_x - x, c_y - y
+                    distance = math.sqrt(delta_x**2 + delta_y**2)
+
+                    if(distance < min_distance):
+                        min_distance = distance
+                        min_key = c_key
+                    
+                centroid_keys = list(centroids.keys())
+
+                #Assigns each victim to a cluster based on which centroid they're closest by
+                if(min_key == centroid_keys[0]): 
+                    cluster0[key] = values
+                elif(min_key == centroid_keys[1]):
+                    cluster1[key] = values
+                elif(min_key == centroid_keys[2]):
+                    cluster2[key] = values
+                elif(min_key == centroid_keys[3]):
+                    cluster3[key] = values
+
+
+            j = 0
+            for clusterX in [cluster0, cluster1, cluster2, cluster3]: # Updates each centroid's centers for next iteration, sees if at least one centroid was changed
+                
+                clusters_values = list(clusterX.values())
+                c_mean = sum(clusters_values) / len(clusters_values)
+
+                if(c_mean != centroids[centroid_keys[j]]):
+                    centroids.update({centroid_keys[j] : c_mean})
+                    cluster_changed = True
+
+                j += 1
+            
+            i += 1
     
-        return [upper_left, upper_right, lower_left, lower_right]
+        return [cluster0, cluster1, cluster2, cluster3]
 
     def predict_severity_and_class(self):
         """ @TODO to be replaced by a classifier and a regressor to calculate the class of severity and the severity values.
