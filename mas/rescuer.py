@@ -128,14 +128,22 @@ class Rescuer(AbstAgent):
                     cluster3[key] = values
 
 
-            j = 0
-            for clusterX in [cluster0, cluster1, cluster2, cluster3]: # Updates each centroid's centers for next iteration, sees if at least one centroid was changed
-                
-                clusters_values = list(clusterX.values())
-                c_mean = sum(clusters_values) / len(clusters_values)
+            j = 0 #tracks in which cluster/centroid we are
 
-                if(c_mean != centroids[centroid_keys[j]]):
-                    centroids.update({centroid_keys[j] : c_mean})
+            for clusterX in [cluster0, cluster1, cluster2, cluster3]: # Updates each centroid's centers for next iteration, sees if at least one centroid was changed
+                sum_x = 0
+                sum_y = 0
+                current_key = centroid_keys[j]
+
+                for values in clusterX.values():
+                    x, y = values[0]
+                    sum_x += x
+                    sum_y += y
+
+                c_mean = (sum_x/len(clusterX), sum_y/len(clusterX))
+                
+                if(c_mean != centroids[current_key][0]):
+                    centroids.update({current_key: (c_mean, centroids[current_key][1])})
                     cluster_changed = True
 
                 j += 1
