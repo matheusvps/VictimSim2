@@ -85,6 +85,9 @@ class Rescuer(AbstAgent):
         #randomize centroids to start up K-Means algorithm
         centroids = dict(random.sample(vic.items(), 4))
 
+        #print("dictionary: ", vic, "\n") #Debugging
+        #print("chosen centroids: ", centroids, "\n")
+
         cluster_changed = True
         number_of_iterations = 4
         i = 0
@@ -98,11 +101,12 @@ class Rescuer(AbstAgent):
         
         while (i < number_of_iterations and cluster_changed == True): #Outer loop
             cluster_changed = False
+            
 
-            for key, values in self.victims.items():  # values are pairs: ((x,y), [<vital signals list>])
+            for key, values in vic.items():  # values are pairs: ((x,y), [<vital signals list>]), this loop assigns a cluster to each victim
                 
                 x, y = values[0]
-                min_distance = sys.maxsize 
+                min_distance = 1000000000000
 
                 for c_key, c_values in centroids.items(): #determines the centroid closest to the current victim
                     
@@ -127,6 +131,8 @@ class Rescuer(AbstAgent):
                 elif(min_key == centroid_keys[3]):
                     cluster3[key] = values
 
+            #print(f"Clusters from iteraction:{i}\n") #Debugging
+            #print(f"\n{cluster0}\n{cluster1}\n{cluster2}\n{cluster3}")
 
             j = 0 #tracks in which cluster/centroid we are
 
@@ -141,6 +147,8 @@ class Rescuer(AbstAgent):
                     sum_y += y
 
                 c_mean = (sum_x/len(clusterX), sum_y/len(clusterX))
+                #print(f"New c_mean for cluster{j}: {c_mean}") #Debugging
+
                 
                 if(c_mean != centroids[current_key][0]):
                     centroids.update({current_key: (c_mean, centroids[current_key][1])})
@@ -148,10 +156,12 @@ class Rescuer(AbstAgent):
 
                 j += 1
             
+            #print(f"New centroids: \n{centroids}\n") #Debugging
             i += 1
-    
+
         return [cluster0, cluster1, cluster2, cluster3]
 
+    
     def predict_severity_and_class(self):
         """ @TODO to be replaced by a classifier and a regressor to calculate the class of severity and the severity values.
             This method should add the vital signals(vs) of the self.victims dictionary with these two values.
