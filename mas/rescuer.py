@@ -81,9 +81,22 @@ class Rescuer(AbstAgent):
                   including the severity value and the corresponding label"""
 
         vic = self.victims
+        
+        # Se não há vítimas, retorna lista vazia
+        if not vic:
+            return []
+            
+        # Determina o número de clusters baseado no número de vítimas
+        num_victims = len(vic)
+        num_clusters = min(4, num_victims)  # Máximo 4 clusters, mas não mais que o número de vítimas
+        
+        if num_clusters == 0:
+            return []
 
         #randomize centroids to start up K-Means algorithm
-        centroids = dict(random.sample(vic.items(), 4))
+        # Converte dict_items para lista antes de usar random.sample
+        vic_items = list(vic.items())
+        centroids = dict(random.sample(vic_items, num_clusters))
 
         #print("dictionary: ", vic, "\n") #Debugging
         #print("chosen centroids: ", centroids, "\n")
@@ -93,20 +106,21 @@ class Rescuer(AbstAgent):
         i = 0
         
     
-        # Divide dictionary into clusters
-        cluster0 = {}
-        cluster1 = {}
-        cluster2 = {}
-        cluster3 = {}
+        # Divide dictionary into clusters - cria clusters dinamicamente
+        clusters = [{} for _ in range(num_clusters)]
         
         while (i < number_of_iterations and cluster_changed == True): #Outer loop
             cluster_changed = False
             
+            # Limpa os clusters para a nova iteração
+            for cluster in clusters:
+                cluster.clear()
 
             for key, values in vic.items():  # values are pairs: ((x,y), [<vital signals list>]), this loop assigns a cluster to each victim
                 
                 x, y = values[0]
                 min_distance = 1000000000000
+                min_cluster_idx = 0
 
                 for c_key, c_values in centroids.items(): #determines the centroid closest to the current victim
                     
@@ -122,21 +136,21 @@ class Rescuer(AbstAgent):
                 centroid_keys = list(centroids.keys())
 
                 #Assigns each victim to a cluster based on which centroid they're closest by
-                if(min_key == centroid_keys[0]): 
-                    cluster0[key] = values
-                elif(min_key == centroid_keys[1]):
-                    cluster1[key] = values
-                elif(min_key == centroid_keys[2]):
-                    cluster2[key] = values
-                elif(min_key == centroid_keys[3]):
-                    cluster3[key] = values
+                for idx, centroid_key in enumerate(centroid_keys):
+                    if min_key == centroid_key:
+                        clusters[idx][key] = values
+                        break
 
             #print(f"Clusters from iteraction:{i}\n") #Debugging
-            #print(f"\n{cluster0}\n{cluster1}\n{cluster2}\n{cluster3}")
+            #print(f"\n{clusters}")
 
             j = 0 #tracks in which cluster/centroid we are
 
-            for clusterX in [cluster0, cluster1, cluster2, cluster3]: # Updates each centroid's centers for next iteration, sees if at least one centroid was changed
+            for clusterX in clusters: # Updates each centroid's centers for next iteration, sees if at least one centroid was changed
+                if len(clusterX) == 0:  # Skip empty clusters
+                    j += 1
+                    continue
+                    
                 sum_x = 0
                 sum_y = 0
                 current_key = centroid_keys[j]
@@ -159,7 +173,7 @@ class Rescuer(AbstAgent):
             #print(f"New centroids: \n{centroids}\n") #Debugging
             i += 1
 
-        return [cluster0, cluster1, cluster2, cluster3]
+        return clusters
 
     
     def predict_severity_and_class(self):
@@ -251,19 +265,28 @@ class Rescuer(AbstAgent):
             #@TODO cluster the victims possibly using the severity and other criteria
             # Here, there 4 clusters
             clusters_of_vic = self.cluster_victims()
+            
+            # Se não há clusters, não há nada para fazer
+            if not clusters_of_vic:
+                print(f"{self.NAME} No victims found to cluster")
+                return
 
             for i, cluster in enumerate(clusters_of_vic):
                 self.save_cluster_csv(cluster, i+1)    # file names start at 1
   
+            # Determina quantos rescuers precisamos baseado no número de clusters
+            num_clusters = len(clusters_of_vic)
+            num_rescuers = min(4, num_clusters)  # Máximo 4 rescuers
+            
             # Instantiate the other rescuers
-            rescuers = [None] * 4
+            rescuers = [None] * num_rescuers
             rescuers[0] = self                    # the master rescuer is the index 0 agent
 
             # Assign the cluster the master agent is in charge of 
             self.clusters = [clusters_of_vic[0]]  # the first one
 
             # Instantiate the other rescuers and assign the clusters to them
-            for i in range(1, 4):    
+            for i in range(1, num_rescuers):    
                 #print(f"{self.NAME} instantianting rescuer {i+1}, {self.get_env()}")
                 filename = f"rescuer_{i+1:1d}_config.txt"
                 config_file = os.path.join(self.config_folder, filename)
@@ -288,9 +311,8 @@ class Rescuer(AbstAgent):
 
             
                 rescuer.planner()            # make the plan for the trajectory
-                rescuer.set_state(VS.ACTIVE) # from now, the simulator calls the deliberation method 
-         
-        
+                rescuer.set_state(VS.ACTIVE) # from now, the simulator calls the deliberation method
+
     def deliberate(self) -> bool:
         """ This is the choice of the next action. The simulator calls this
         method at each reasonning cycle if the agent is ACTIVE.
