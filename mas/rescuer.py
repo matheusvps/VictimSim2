@@ -15,6 +15,8 @@ import random
 import math
 import csv
 import sys
+import pickle
+import numpy as np
 from map import Map
 from vs.abstract_agent import AbstAgent
 from vs.physical_agent import PhysAgent
@@ -25,6 +27,28 @@ from abc import ABC, abstractmethod
 
 ## Classe que define o Agente Rescuer com um plano fixo
 class Rescuer(AbstAgent):
+    # Variáveis de classe para o classificador e scaler
+    classifier = None
+    scaler = None
+    model_loaded = False
+
+    @classmethod
+    def load_model(cls):
+        if not cls.model_loaded:
+            model_path = os.path.join(os.path.dirname(__file__), "models", "victim_classifier.pkl")
+            scaler_path = os.path.join(os.path.dirname(__file__), "models", "victim_scaler.pkl")
+            try:
+                with open(model_path, 'rb') as f:
+                    cls.classifier = pickle.load(f)
+                with open(scaler_path, 'rb') as f:
+                    cls.scaler = pickle.load(f)
+                cls.model_loaded = True
+                print("[Rescuer] Classificador e scaler carregados com sucesso!")
+            except Exception as e:
+                print(f"[Rescuer] ERRO ao carregar o classificador/scaler: {e}")
+                cls.classifier = None
+                cls.scaler = None
+
     def __init__(self, env, config_file, nb_of_explorers=1,clusters=[]):
         """ 
         @param env: a reference to an instance of the environment class
@@ -177,15 +201,25 @@ class Rescuer(AbstAgent):
 
     
     def predict_severity_and_class(self):
-        """ @TODO to be replaced by a classifier and a regressor to calculate the class of severity and the severity values.
-            This method should add the vital signals(vs) of the self.victims dictionary with these two values.
-
-            This implementation assigns random values to both, severity value and class"""
+        """ Usa o classificador treinado para prever a classe de severidade das vítimas. """
+        # Carrega o modelo se ainda não foi carregado
+        self.__class__.load_model()
+        if self.__class__.classifier is None or self.__class__.scaler is None:
+            print("[Rescuer] Classificador ou scaler não carregado. Usando valores aleatórios como fallback.")
+            for vic_id, values in self.victims.items():
+                severity_value = random.uniform(0.1, 99.9)
+                severity_class = random.randint(1, 4)
+                values[1].extend([severity_value, severity_class])
+            return
 
         for vic_id, values in self.victims.items():
-            severity_value = random.uniform(0.1, 99.9)          # to be replaced by a regressor 
-            severity_class = random.randint(1, 4)               # to be replaced by a classifier
-            values[1].extend([severity_value, severity_class])  # append to the list of vital signals; values is a pair( (x,y), [<vital signals list>] )
+            # Sinais vitais: pSist, pDiast, qPA, pulso, resp
+            features = np.array(values[1][:5]).reshape(1, -1)
+            features_scaled = self.__class__.scaler.transform(features)
+            predicted_class = int(self.__class__.classifier.predict(features_scaled)[0])
+            # Valor de gravidade: manter aleatório (ou pode-se usar um regressor no futuro)
+            severity_value = random.uniform(0.1, 99.9)
+            values[1].extend([severity_value, predicted_class])
 
 
     def sequencing(self):
