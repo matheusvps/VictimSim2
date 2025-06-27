@@ -1,0 +1,28 @@
+=== RELATÓRIO DE COMPARAÇÃO ENTRE ALGORITMOS ===
+
+1. MÉTRICAS DE PERFORMANCE:
+--------------------------------------------------
+ Métrica     CART  Perceptron
+Acurácia 0.930000    0.480000
+Precisão 0.929807    0.449125
+  Recall 0.930000    0.480000
+F1-Score 0.929305    0.458739
+
+2. VALIDAÇÃO CRUZADA:
+--------------------------------------------------
+CART - Média: 0.9256, Std: 0.0055
+Perceptron - Média: 0.5075, Std: 0.0303
+
+3. ANÁLISE COMPARATIVA:
+--------------------------------------------------
+Melhor Acurácia: CART
+Melhor Precisão: CART
+Melhor Recall: CART
+Melhor F1-Score: CART
+
+4. RECOMENDAÇÕES:
+--------------------------------------------------
+• CART é mais interpretável e pode capturar relações não-lineares
+• Perceptron é mais rápido para predições mas pode ser menos interpretável
+• Para este problema específico, recomenda-se usar ambos os modelos
+  e escolher baseado no contexto de uso (interpretabilidade vs velocidade)
