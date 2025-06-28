@@ -1,0 +1,28 @@
+=== RELATÓRIO DE COMPARAÇÃO ENTRE CLASSIFICADORES ===
+
+1. MÉTRICAS DE PERFORMANCE:
+--------------------------------------------------
+ Métrica     CART      MLP
+Acurácia 0.926250 0.922500
+Precisão 0.925561 0.923547
+  Recall 0.926250 0.922500
+F1-Score 0.925831 0.922752
+
+2. VALIDAÇÃO CRUZADA:
+--------------------------------------------------
+CART - Média: 0.9284, Std: 0.0051
+MLP - Média: 0.9159, Std: 0.0036
+
+3. ANÁLISE COMPARATIVA:
+--------------------------------------------------
+Melhor Acurácia: CART
+Melhor Precisão: CART
+Melhor Recall: CART
+Melhor F1-Score: CART
+
+4. RECOMENDAÇÕES:
+--------------------------------------------------
+• CART é mais interpretável e pode capturar relações não-lineares
+• MLP é mais flexível mas pode ser menos interpretável
+• Para este problema específico, recomenda-se usar ambos os modelos
+  e escolher baseado no contexto de uso (interpretabilidade vs flexibilidade)

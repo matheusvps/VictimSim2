@@ -1,0 +1,26 @@
+=== RELATÓRIO DE COMPARAÇÃO ENTRE REGRESSORES ===
+
+1. MÉTRICAS DE PERFORMANCE:
+--------------------------------------------------
+Métrica     CART      MLP
+   RMSE 3.050341 2.146288
+    MAE 1.634690 1.613012
+     R² 0.965204 0.982773
+
+2. VALIDAÇÃO CRUZADA:
+--------------------------------------------------
+CART - Média RMSE: 3.3736, Std: 0.2721
+MLP - Média RMSE: 2.5493, Std: 0.1195
+
+3. ANÁLISE COMPARATIVA:
+--------------------------------------------------
+Melhor RMSE: MLP
+Melhor MAE: MLP
+Melhor R²: MLP
+
+4. RECOMENDAÇÕES:
+--------------------------------------------------
+• CART é mais interpretável e pode capturar relações não-lineares
+• MLP é mais flexível mas pode ser menos interpretável
+• Para este problema específico, recomenda-se usar ambos os modelos
+  e escolher baseado no contexto de uso (interpretabilidade vs flexibilidade)
