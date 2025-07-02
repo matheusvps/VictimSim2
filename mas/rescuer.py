@@ -222,21 +222,288 @@ class Rescuer(AbstAgent):
             values[1].extend([severity_value, predicted_class])
 
 
+    def heuristic(coord1, coord2, min_difficulty):
+        """ A heuristic function to estimate the cost between two coordinates.
+            It uses the Diagonal Distance, adjusted by the minimum difficulty of the map.
+            @param coord1: first coordinate (x1, y1)
+            @param coord2: second coordinate (x2, y2)
+            @return: estimated cost between coord1 and coord2 """
+        x1, y1 = coord1
+        x2, y2 = coord2
+        deltaX = abs(x2 - x1)
+        deltaY = abs(y2 - y1)
+        distance = deltaX + deltaY - min(deltaX, deltaY)* 0.5 # You save 0.5 for all diagonal moves
+        return distance*min_difficulty
+
+    
+    def a_star(map, coord_start, coord_goal, min_difficulty):
+        """ A* search function, finds the shortest distance between two coordinates on the map.
+            @param coord_start: start coordinate (x1, y1)
+            @param coord_goal: goal coordinate (x2, y2)
+            @param min_difficulty: The lowest value of acess difficulty
+            @return: estimated cost between coord1 and coord2 """
+        
+        #Set starting values for algorithm
+        coord_difficulty = map.get_difficulty(coord_start)
+        
+
+        priority_queue = []
+        done_queue = []
+        dist_traveled = 0
+        
+        #this is the initial node, each node of the heap is a tuple in the format:(estimated total distance to goal, coordinate, difficulty, minimum distance traveled)
+        hp.heappush(priority_queue, (heuristic(coord_start, coord_goal, min_difficulty),coord_start, coord_difficulty, dist_traveled))
+
+        while(priority_queue):
+
+            current = hp.heappop(priority_queue)
+            done_queue.append(current[1])
+
+            actions = map.get_actions_results(current[1])
+
+            neighbors = []
+            
+
+            for i in range(len(actions)):
+                if(actions[i] == VS.CLEAR): #if the action in direction can be taken
+
+                    x, y = current[1]
+                    movement_cost = 1
+
+                    match i: #adjusts coordinate and movement cost, for target of action, based on its position in the actions list
+                        case 0:
+                            y += 1
+                        case 1:
+                            x += 1
+                            y += 1
+                            movement_cost = 1.5
+                        case 2:
+                            x += 1
+                        case 3:
+                            x += 1
+                            y -= 1
+                            movement_cost = 1.5
+                        case 4:
+                            y -= 1
+                        case 5:
+                            y -= 1
+                            x -= 1
+                            movement_cost = 1.5
+                        case 6:
+                            x -= 1
+                        case 7:
+                            x -=1
+                            y += 1
+                            movement_cost = 1.5
+
+                    neighbor_coord = x, y
+                    if(neighbor_coord in done_queue): # skips node if it has already been reached by the best route
+                        continue
+                    
+                    neighbor_difficulty = map.get_difficulty(neighbor_coord)
+                    dist_to_neighbor = current[3] + movement_cost * neighbor_difficulty
+                    estimated_distance = heuristic(neighbor_coord, coord_goal, min_difficulty) + dist_to_neighbor
+
+
+                    if(neighbor_coord not in [pq_list[1] for pq_list in priority_queue]):
+                        if(neighbor_coord == coord_goal): 
+                            return dist_to_neighbor # Return minimum distance traveled from start to goal
+                            
+                        hp.heappush(priority_queue, (estimated_distance, neighbor_coord, neighbor_difficulty, dist_to_neighbor))
+                    else: #neighbor already discovered
+                        j = 0
+                        while(j < len(priority_queue)):
+                            #Searches for the node in the priority queue and if the distance found is shorter than the found previously, replace it
+                            if(priority_queue[j][1] == neighbor_coord and priority_queue[j][0] > estimated_distance):
+                                priority_queue[j][0] = estimated_distance
+                                break #found the node, stop the search
+                            j += 1
+                            
+    def fitness(sequence, distance_matrix):
+        """ fitness function, calculates total lenght of a sequence
+            @param sequence: a sequence of victims to visit, 
+            @param distance_matrix: a matrix storing the distance between victim x and y in m[x][y], victim 0 represents the starting point.
+            @return: the total lenght of given sequence"""
+        dist_sum = 0
+        
+        for i in range(len(sequence - 1)):
+            dist_sum += distance_matrix[sequence[i]][sequence[i + 1]]
+        
+        return dist_sum
+        
+            
+            
+                            
+    def genetic_algorithm(indexed_victims, distance_matrix, pop_size, generations, cx_prob, mut_prob):
+        """ genetic algorithm, finds the best combination of victims to rescue, based on maximizing victim visits in the shortest time.
+            utilizing tourney for selection
+            @param indexed_victims: a dictionary of victims in the format: {index : vic_id, (x, y), ["vs"]}
+            @param distance_matrix: a matrix storing the distance between victim x and y in m[x][y], victim 0 represents the starting point.
+            @param pop_size: the number of individuals per population
+            @param generations: the number of generations for simulation
+            @param cx_prob: probability of crossover, in interval ]0, 1]
+            @param mut_prob: probability of mutation, in interval ]0, 1]
+            @return: best sequence of victims (whithout starting point) in the format:{vic_id : (x, y), ["vs"]}"""
+            
+        starting_population = []
+        vic_number = len(indexed_victims)
+            
+        #populates generation 0 randomly
+        for _ in range(pop_size):
+            random_vic_order = random.shuffle(indexed_victims.keys())
+              
+            #victim 0 must be in first position, since it is the starting position
+            for i in range(vic_number):
+                if(random_vic_order[i] == 0):
+                    aux = random_vic_order[0]
+                    random_vic_order[0] = random_vic_order[i]
+                    random_vic_order[i] = aux
+                    break
+                    
+            starting_population.append(random_vic_order)
+            
+        for gen in range(generations):
+            parent_population = []
+            new_population = []
+                
+            #Determines the parent generation via tournament, each parent is the best of 3 random individuals from previous generation
+            for i in range(pop_size):
+                tourney_candidates = random.sample(starting_population, 3)
+                min_fitness = 10000
+                #finds best candidate
+                for candidate in tourney_candidates:
+                    fit_test = fitness(candidate, distance_matrix)
+                        
+                    if(fit_test < min_fitness):
+                        winner = candidate
+                        min_fitness = fit_test
+
+                            
+                parent_population.append(winner)
+                    
+                #every other time a parent gets added
+                if(i%2 == 1):
+                       
+                    parent_1 = parent_population[i - 1]
+                    parent_2 = parent_population[i]
+
+                    #parental crossover over gene strip
+                    if(random.random() <= cx_prob):
+                    
+                        child_1 = [-1]*vic_number
+                        child_2 = [-1]*vic_number
+                        
+                        child_1[0] = parent_1[0]
+                        child_2[0] = parent_2[0]
+                        
+                        #gene strip from start to end
+                        start, end = sorted(random.sample(range(1, vic_number), 2))
+                        child_1[start:end] = parent_1[start:end]
+                        child_2[start:end] = parent_2[start:end]
+                            
+                        iterator = [j for j in range(1, start - 1)] + [j for j in range(end + 1, vic_number)]
+                        
+                        #Crossover genes
+                        fill_genes_1 = [gene for gene in parent_1 if gene not in child_2]
+                        fill_genes_2 = [gene for gene in parent_2 if gene not in child_1]
+                        k = 0
+                            
+                        for j in iterator:
+                            child_1[j] = fill_genes_2[k]
+                            child_2[j] = fill_genes_1[k]
+                            k += 1
+                    else: #No crossover
+                        child_1 = parent_1
+                        child_2 = parent_2
+                        
+                    #Possible mutation of first child
+                    if(random.random() < mut_prob):
+                        gene1, gene2 = random.sample(range(1, vic_number), 2)
+                        child_1[gene1], child_1[gene2] = child_1[gene2], child_2[gene1]
+                    #Possible mutation of second child
+                    if(random.random() < mut_prob):
+                        gene1, gene2 = random.sample(range(1, vic_number), 2)
+                        child_2[gene1], child_2[gene2] = child_2[gene2], child_2[gene1]
+                    
+                    new_population.append(child_1)
+                    new_population.append(child_2)
+            
+            #Setup for next generation on next iteration
+            starting_population = new_population 
+        
+
+        #Formatting return value, removing indexes from dictionary
+        best_sequence = {}
+        for index in new_population[1:vic_number]:
+            for values in indexed_victims.get(index):
+                id, pos, condition = values
+                best_sequence[id] = (pos, condition)
+        
+        return best_sequence
+        
     def sequencing(self):
-        """ Currently, this method sort the victims by the x coordinate followed by the y coordinate
-            @TODO It must be replaced by a Genetic Algorithm that finds the possibly best visiting order """
+        """ This method relies on a Genetic Algorithm to find the possibly best visiting order"""
 
         """ We consider an agent may have different sequences of rescue. The idea is the rescuer can execute
             sequence[0], sequence[1], ...
             A sequence is a dictionary with the following structure: [vic_id]: ((x,y), [<vs>]"""
 
-        new_sequences = []
+        #original placeholder definition:
 
-        for seq in self.sequences:   # a list of sequences, being each sequence a dictionary
-            seq = dict(sorted(seq.items(), key=lambda item: item[1]))
-            new_sequences.append(seq)       
+        #new_sequences = []
+
+        #for seq in self.sequences:   # a list of sequences, being each sequence a dictionary
+            #seq = dict(sorted(seq.items(), key=lambda item: item[1]))
+            #new_sequences.append(seq)       
             #print(f"{self.NAME} sequence of visit:\n{seq}\n")
 
+        #self.sequences = new_sequences
+
+
+        new_sequences = []
+        map = self.map
+
+        # get minimum difficulty for each coordinate in map
+        # the minimum difficulty is used in the heuristic of the A* algorithm
+        # to find the shortest path between victims
+
+        min_difficulty = 100
+        x, y = 0, 0
+
+        while map.in_map(x, y): #goes through x values
+
+            while map.in_map((x, y)): #goes through y values
+
+                difficulty = map.get_difficulty((x, y))
+                if difficulty < min_difficulty:
+                    min_difficulty = difficulty
+                y += 1
+
+            y = 0
+            x += 1
+
+
+        for seq in self.sequences:   # a list of sequences, being each sequence a dictionary
+
+            #First, build distance dictionary matrix between victims using A* algorithm
+            
+            #Indexed victims dictionary, in format: {index : (vic_id, (x, y), ["vs"])}
+
+            indexed_victims = dict(enumerate(seq.items(), 1))
+            indexed_victims.update({0 : ("", (self.plan_x, self.plan_y), "")})
+            num_victims = len(indexed_victims)
+
+            distance_matrix = [[-1 for _ in range(num_victims)] for _ in range(num_victims)]
+            
+            #fills distance_matrix, each position (x, y) in the matrix is the minimum distance between victims x and y in the map.
+            for i in range(num_victims):
+                for j in range(i):
+                    distance_matrix[i][j] = a_star(map, indexed_victims.get(i)[1], indexed_victims.get(j)[1], min_difficulty)
+                    distance_matrix[j][i] = distance_matrix[i][j]
+            
+            
+            new_sequences.append(genetic_algorithm(indexed_victims, distance_matrix, 100, 50, 0.8, 0.2))
+        
         self.sequences = new_sequences
 
     def planner(self):
