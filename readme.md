@@ -280,33 +280,148 @@ Esses arquivos documentam todo o processo de treinamento, validação, comparaç
 ## 5. Resultados e Análise
 
 ### 5.1 Exploração
-- Estratégia, algoritmos utilizados e comparação com baseline (ver arquivos de resultados e gráficos em `Results_*/`)
 
-### 5.2 Agrupamento
-- Estratégia de clustering, análise dos grupos formados (ver arquivos `cluster*.txt`)
-
-### 5.3 Sequenciamento
-- Estratégia de otimização, análise das sequências geradas (ver arquivos `seq*.txt` e imagens de visualização)
-
-### 5.4 Socorro
-- Estratégia de execução, análise dos resultados comparados ao baseline
-
-### 5.5 Classificador e Regressor
-- Descrição dos pré-processamentos, validação cruzada, métricas (precisão, recall, f-measure, acurácia para classificadores; RMSE para regressores)
-- Comparação das melhores configurações de cada algoritmo (ver relatórios em `mas/models/`)
-- Justificativa da escolha final baseada em viés/variância (under/overfitting)
-
-### 5.6 Explicabilidade
-- Explicações do processo deliberativo e dos modelos (ver arquivos de explicação em `mas/models/`)
-
-### 5.7 Treinamento dos Modelos de Classificação e Regressão
-- Descrição das etapas, algoritmos, validação, pré-processamento, salvamento dos modelos, explicabilidade e integração com o Rescuer
-- Arquivos gerados e onde encontrá-los
+```python
+# Estratégia de exploração híbrida: BFS + Heat Map + Clusters
+def get_next_position(self):
+    if not self.current_path:
+        if not self.frontier:
+            next_pos = self.find_best_unexplored_cell()
+            if next_pos:
+                self.current_path = self.calculate_path_to_position(next_pos)
+                return self.current_path[0] if self.current_path else None
+            return None
+        # Ordena a fronteira pelo heat map
+        frontier_list = list(self.frontier)
+        frontier_list.sort(key=lambda x: self.heat_map.get((x[0], x[1]), 0), reverse=True)
+        self.frontier = deque(frontier_list)
+        next_x, next_y, path = self.frontier.popleft()
+        if (next_x, next_y) in self.visited:
+            return self.get_next_position()
+        self.visited.add((next_x, next_y))
+        self.current_path = path
+        return self.current_path[0]
+    return self.current_path.pop(0)
+```
+*Esse trecho mostra a priorização inteligente da exploração, combinando BFS e mapa de calor.*
 
 ---
 
-## 6. Ética
-- Discussão sobre possíveis vieses, neutralidade e impactos sociais do sistema.
+### 5.2 Agrupamento
+
+```python
+# Agrupamento de vítimas usando K-Means adaptado
+def cluster_victims(self):
+    num_clusters = min(4, len(self.victims))
+    centroids = dict(random.sample(list(self.victims.items()), num_clusters))
+    for i in range(4):  # Máximo 4 iterações
+        clusters = [{} for _ in range(num_clusters)]
+        # Atribuição das vítimas ao cluster mais próximo
+        for key, values in self.victims.items():
+            x, y = values[0]
+            min_key = min(centroids, key=lambda c: math.dist((x, y), centroids[c][0]))
+            idx = list(centroids.keys()).index(min_key)
+            clusters[idx][key] = values
+        # Atualização dos centróides
+        for idx, cluster in enumerate(clusters):
+            if cluster:
+                mean_x = sum(v[0][0] for v in cluster.values()) / len(cluster)
+                mean_y = sum(v[0][1] for v in cluster.values()) / len(cluster)
+                centroids[list(centroids.keys())[idx]] = ((mean_x, mean_y), centroids[list(centroids.keys())[idx]][1])
+    return clusters
+```
+*Exemplo de agrupamento dinâmico de vítimas. Resultados podem ser visualizados nos arquivos `cluster*.txt`.*
+
+---
+
+### 5.3 Sequenciamento
+
+```python
+# Sequenciamento de resgate com Algoritmo Genético
+def genetic_algorithm(indexed_victims, distance_matrix, pop_size, generations, cx_prob, mut_prob):
+    # Inicialização da população
+    # Seleção por torneio, crossover e mutação
+    # Avaliação por fitness (menor distância total)
+    # Retorna a melhor sequência encontrada
+    ...
+```
+*O sequenciamento otimiza a ordem de visita das vítimas. Visualize as sequências e clusters com:*
+```sh
+python tools/results/plot_clusters_and_seq.py
+```
+*Inclua a imagem gerada (`results_graphics.png` ou similar) na apresentação.*
+
+---
+
+### 5.4 Socorro
+
+```python
+# Execução do socorro com A* para trajetórias ótimas
+def a_star(map, coord_start, coord_goal, min_difficulty):
+    # Busca o menor caminho considerando custos e obstáculos
+    ...
+```
+*O socorrista segue a sequência calculada, usando A* para cada trajeto entre vítimas e retorno à base.*
+
+---
+
+### 5.5 Classificador e Regressor
+
+```python
+# Treinamento do classificador CART (exemplo de configuração)
+cart_configs = [
+    {'max_depth': 5, 'min_samples_split': 10, 'min_samples_leaf': 5, 'criterion': 'gini'},
+    {'max_depth': 10, 'min_samples_split': 5, 'min_samples_leaf': 2, 'criterion': 'entropy'},
+    {'max_depth': 15, 'min_samples_split': 2, 'min_samples_leaf': 1, 'criterion': 'gini'}
+]
+# Treinamento e validação cruzada
+cart_classifier = DecisionTreeClassifier(**cart_configs[0])
+cv_scores = cross_val_score(cart_classifier, X_train_scaled, y_train, cv=5)
+```
+*Resultados e métricas (precisão, recall, f1, acurácia) estão em `mas/models/classifier_comparison_report.txt`.*
+
+```python
+# Treinamento do regressor CART (exemplo de configuração)
+cart_regressor = DecisionTreeRegressor(max_depth=5, min_samples_split=10, min_samples_leaf=5, criterion='squared_error')
+cv_scores = cross_val_score(cart_regressor, X_train_scaled, y_train, cv=5, scoring='neg_mean_squared_error')
+```
+*Resultados de RMSE, MAE, R² em `mas/models/regressor_comparison_report.txt`.*
+
+---
+
+### 5.6 Explicabilidade
+
+```python
+# Geração de explicações LIME e SHAP
+generate_explainability_analysis(cart_results, mlp_results, X, y, features, class_names, output_dir)
+```
+*Veja exemplos em `mas/models/lime_analysis.txt` e `cart_shap_summary.png`.*
+
+---
+
+### 5.7 Sistema Multiagente
+
+```python
+class AbstAgent(ABC):
+    def deliberate(self) -> bool:
+        """Escolha da próxima ação. Chamado a cada ciclo de raciocínio."""
+        pass
+```
+*Todos os agentes (explorador, socorrista) herdam de `AbstAgent`, integrando suas ações no ambiente.*
+
+---
+
+### 6. Ética
+
+> **Discussão:**  
+> O sistema pode apresentar viés caso os dados de treinamento não representem adequadamente todos os tipos de vítimas. A neutralidade depende da qualidade dos dados e da transparência dos modelos. Situações não previstas (ex: vítimas com sinais vitais atípicos) podem afetar a equidade do resgate.
+
+---
+
+### 5.8 Justificativa de escolha dos modelos
+
+> **Justificativa:**  
+> A escolha entre CART e MLP é feita com base em análise de underfitting/overfitting (viés/variância), usando validação cruzada e testes cegos (dataset de 800 vítimas). Veja detalhes nos relatórios de comparação.
 
 ---
 
