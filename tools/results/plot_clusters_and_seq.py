@@ -43,7 +43,7 @@ env_file = "env_config.txt"                       # the program concatenates dat
 obst_file = "env_obst.txt"                        # the program concatenates data_folder + obst_file                      
 victims_file = "env_victims.txt"                  # the program concatenates data_folder + victims_file   
 vital_signals_file = "env_vital_signals.txt"      # the program concatenates data_folder + vsignal_file
-cluster_folder = "./clusters"                     # Directory containing cluster and sequence of visit files 
+cluster_folder = "./mas/clusters"                 # Directory containing cluster and sequence of visit files 
 
 # Define colors
 WHITE = (255, 255, 255)

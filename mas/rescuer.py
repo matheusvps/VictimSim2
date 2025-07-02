@@ -17,6 +17,7 @@ import csv
 import sys
 import pickle
 import numpy as np
+import heapq as hp
 from map import Map
 from vs.abstract_agent import AbstAgent
 from vs.physical_agent import PhysAgent
@@ -222,6 +223,7 @@ class Rescuer(AbstAgent):
             values[1].extend([severity_value, predicted_class])
 
 
+    @staticmethod
     def heuristic(coord1, coord2, min_difficulty):
         """ A heuristic function to estimate the cost between two coordinates.
             It uses the Diagonal Distance, adjusted by the minimum difficulty of the map.
@@ -236,6 +238,7 @@ class Rescuer(AbstAgent):
         return distance*min_difficulty
 
     
+    @staticmethod
     def a_star(map, coord_start, coord_goal, min_difficulty):
         """ A* search function, finds the shortest distance between two coordinates on the map.
             @param coord_start: start coordinate (x1, y1)
@@ -252,7 +255,7 @@ class Rescuer(AbstAgent):
         dist_traveled = 0
         
         #this is the initial node, each node of the heap is a tuple in the format:(estimated total distance to goal, coordinate, difficulty, minimum distance traveled)
-        hp.heappush(priority_queue, (heuristic(coord_start, coord_goal, min_difficulty),coord_start, coord_difficulty, dist_traveled))
+        hp.heappush(priority_queue, (Rescuer.heuristic(coord_start, coord_goal, min_difficulty),coord_start, coord_difficulty, dist_traveled))
 
         while(priority_queue):
 
@@ -302,7 +305,7 @@ class Rescuer(AbstAgent):
                     
                     neighbor_difficulty = map.get_difficulty(neighbor_coord)
                     dist_to_neighbor = current[3] + movement_cost * neighbor_difficulty
-                    estimated_distance = heuristic(neighbor_coord, coord_goal, min_difficulty) + dist_to_neighbor
+                    estimated_distance = Rescuer.heuristic(neighbor_coord, coord_goal, min_difficulty) + dist_to_neighbor
 
 
                     if(neighbor_coord not in [pq_list[1] for pq_list in priority_queue]):
@@ -313,12 +316,13 @@ class Rescuer(AbstAgent):
                     else: #neighbor already discovered
                         j = 0
                         while(j < len(priority_queue)):
-                            #Searches for the node in the priority queue and if the distance found is shorter than the found previously, replace it
+                            #Searches for the node in the priority queue e se a distância encontrada for menor, substitui a tupla inteira
                             if(priority_queue[j][1] == neighbor_coord and priority_queue[j][0] > estimated_distance):
-                                priority_queue[j][0] = estimated_distance
+                                priority_queue[j] = (estimated_distance, neighbor_coord, neighbor_difficulty, dist_to_neighbor)
                                 break #found the node, stop the search
                             j += 1
                             
+    @staticmethod
     def fitness(sequence, distance_matrix):
         """ fitness function, calculates total lenght of a sequence
             @param sequence: a sequence of victims to visit, 
@@ -326,7 +330,7 @@ class Rescuer(AbstAgent):
             @return: the total lenght of given sequence"""
         dist_sum = 0
         
-        for i in range(len(sequence - 1)):
+        for i in range(len(sequence) - 1):
             dist_sum += distance_matrix[sequence[i]][sequence[i + 1]]
         
         return dist_sum
@@ -334,6 +338,7 @@ class Rescuer(AbstAgent):
             
             
                             
+    @staticmethod
     def genetic_algorithm(indexed_victims, distance_matrix, pop_size, generations, cx_prob, mut_prob):
         """ genetic algorithm, finds the best combination of victims to rescue, based on maximizing victim visits in the shortest time.
             utilizing tourney for selection
@@ -347,10 +352,21 @@ class Rescuer(AbstAgent):
             
         starting_population = []
         vic_number = len(indexed_victims)
+        
+        # Se há apenas uma vítima (além do ponto inicial), retorna a sequência original
+        if vic_number <= 2:
+            best_sequence = {}
+            for index in range(1, vic_number):
+                values = indexed_victims.get(index)
+                if values:
+                    id, pos, condition = values
+                    best_sequence[id] = (pos, condition)
+            return best_sequence
             
         #populates generation 0 randomly
         for _ in range(pop_size):
-            random_vic_order = random.shuffle(indexed_victims.keys())
+            random_vic_order = list(indexed_victims.keys())
+            random.shuffle(random_vic_order)
               
             #victim 0 must be in first position, since it is the starting position
             for i in range(vic_number):
@@ -368,11 +384,14 @@ class Rescuer(AbstAgent):
                 
             #Determines the parent generation via tournament, each parent is the best of 3 random individuals from previous generation
             for i in range(pop_size):
-                tourney_candidates = random.sample(starting_population, 3)
+                if len(starting_population) >= 3:
+                    tourney_candidates = random.sample(starting_population, 3)
+                else:
+                    tourney_candidates = starting_population
                 min_fitness = 10000
                 #finds best candidate
                 for candidate in tourney_candidates:
-                    fit_test = fitness(candidate, distance_matrix)
+                    fit_test = Rescuer.fitness(candidate, distance_matrix)
                         
                     if(fit_test < min_fitness):
                         winner = candidate
@@ -382,10 +401,13 @@ class Rescuer(AbstAgent):
                 parent_population.append(winner)
                     
                 #every other time a parent gets added
-                if(i%2 == 1):
+                if(i%2 == 1 and i < len(parent_population)):
                        
-                    parent_1 = parent_population[i - 1]
-                    parent_2 = parent_population[i]
+                    if i - 1 < len(parent_population) and i < len(parent_population):
+                        parent_1 = parent_population[i - 1]
+                        parent_2 = parent_population[i]
+                    else:
+                        continue
 
                     #parental crossover over gene strip
                     if(random.random() <= cx_prob):
@@ -397,31 +419,36 @@ class Rescuer(AbstAgent):
                         child_2[0] = parent_2[0]
                         
                         #gene strip from start to end
-                        start, end = sorted(random.sample(range(1, vic_number), 2))
+                        if vic_number > 2:
+                            start, end = sorted(random.sample(range(1, vic_number), 2))
+                        else:
+                            start, end = 1, 1
                         child_1[start:end] = parent_1[start:end]
                         child_2[start:end] = parent_2[start:end]
                             
-                        iterator = [j for j in range(1, start - 1)] + [j for j in range(end + 1, vic_number)]
-                        
-                        #Crossover genes
-                        fill_genes_1 = [gene for gene in parent_1 if gene not in child_2]
-                        fill_genes_2 = [gene for gene in parent_2 if gene not in child_1]
-                        k = 0
+                        if vic_number > 2:
+                            iterator = [j for j in range(1, start - 1)] + [j for j in range(end + 1, vic_number)]
                             
-                        for j in iterator:
-                            child_1[j] = fill_genes_2[k]
-                            child_2[j] = fill_genes_1[k]
-                            k += 1
+                            #Crossover genes
+                            fill_genes_1 = [gene for gene in parent_1 if gene not in child_2]
+                            fill_genes_2 = [gene for gene in parent_2 if gene not in child_1]
+                            k = 0
+                                
+                            for j in iterator:
+                                if k < len(fill_genes_2) and k < len(fill_genes_1):
+                                    child_1[j] = fill_genes_2[k]
+                                    child_2[j] = fill_genes_1[k]
+                                    k += 1
                     else: #No crossover
                         child_1 = parent_1
                         child_2 = parent_2
                         
                     #Possible mutation of first child
-                    if(random.random() < mut_prob):
+                    if(random.random() < mut_prob and vic_number > 2):
                         gene1, gene2 = random.sample(range(1, vic_number), 2)
                         child_1[gene1], child_1[gene2] = child_1[gene2], child_2[gene1]
                     #Possible mutation of second child
-                    if(random.random() < mut_prob):
+                    if(random.random() < mut_prob and vic_number > 2):
                         gene1, gene2 = random.sample(range(1, vic_number), 2)
                         child_2[gene1], child_2[gene2] = child_2[gene2], child_2[gene1]
                     
@@ -434,10 +461,20 @@ class Rescuer(AbstAgent):
 
         #Formatting return value, removing indexes from dictionary
         best_sequence = {}
-        for index in new_population[1:vic_number]:
-            for values in indexed_victims.get(index):
-                id, pos, condition = values
-                best_sequence[id] = (pos, condition)
+        if new_population:
+            best_individual = new_population[0]  # Take the first individual as the best
+            for index in best_individual[1:vic_number]:
+                values = indexed_victims.get(index)
+                if values:
+                    id, pos, condition = values
+                    best_sequence[id] = (pos, condition)
+        else:
+            # Se não há população, retorna a sequência original
+            for index in range(1, vic_number):
+                values = indexed_victims.get(index)
+                if values:
+                    id, pos, condition = values
+                    best_sequence[id] = (pos, condition)
         
         return best_sequence
         
@@ -470,7 +507,7 @@ class Rescuer(AbstAgent):
         min_difficulty = 100
         x, y = 0, 0
 
-        while map.in_map(x, y): #goes through x values
+        while map.in_map((x, y)): #goes through x values
 
             while map.in_map((x, y)): #goes through y values
 
@@ -485,12 +522,15 @@ class Rescuer(AbstAgent):
 
         for seq in self.sequences:   # a list of sequences, being each sequence a dictionary
 
-            #First, build distance dictionary matrix between victims using A* algorithm
-            
-            #Indexed victims dictionary, in format: {index : (vic_id, (x, y), ["vs"])}
-
-            indexed_victims = dict(enumerate(seq.items(), 1))
-            indexed_victims.update({0 : ("", (self.plan_x, self.plan_y), "")})
+            # Corrigir a montagem do indexed_victims para garantir que (x, y) seja tupla
+            indexed_victims = {}
+            idx = 1
+            for vic_id, values in seq.items():
+                # Garantir que values[0] seja tupla
+                coord = tuple(values[0])
+                indexed_victims[idx] = (vic_id, coord, values[1])
+                idx += 1
+            indexed_victims[0] = ("", (self.plan_x, self.plan_y), "")
             num_victims = len(indexed_victims)
 
             distance_matrix = [[-1 for _ in range(num_victims)] for _ in range(num_victims)]
@@ -498,11 +538,11 @@ class Rescuer(AbstAgent):
             #fills distance_matrix, each position (x, y) in the matrix is the minimum distance between victims x and y in the map.
             for i in range(num_victims):
                 for j in range(i):
-                    distance_matrix[i][j] = a_star(map, indexed_victims.get(i)[1], indexed_victims.get(j)[1], min_difficulty)
+                    distance_matrix[i][j] = Rescuer.a_star(map, indexed_victims.get(i)[1], indexed_victims.get(j)[1], min_difficulty)
                     distance_matrix[j][i] = distance_matrix[i][j]
             
             
-            new_sequences.append(genetic_algorithm(indexed_victims, distance_matrix, 100, 50, 0.8, 0.2))
+            new_sequences.append(self.genetic_algorithm(indexed_victims, distance_matrix, 100, 50, 0.8, 0.2))
         
         self.sequences = new_sequences
 

@@ -53,7 +53,10 @@ class Map:
     def get_difficulty(self, coord):
         """ get only the difficulty value associated to a coord key: a triple (diff, vic_id, [actions' results])
             @param coord: a pair (x, y), the key of the dictionary"""
-        return self.data.get(coord)[0]
+        value = self.data.get(coord)
+        if value is None:
+            return float('inf')
+        return value[0]
 
     def get_vic_id(self, coord):
         """ get only the victim id number associated to a coord key: a triple (diff, vic_id, [actions' results])
@@ -63,7 +66,10 @@ class Map:
     def get_actions_results(self, coord):
         """ get only the actions' results associated to a coord key: a triple (diff, vic_id, [actions' results])
             @param coord: a pair (x, y), the key of the dictionary"""
-        return self.data.get(coord)[2]
+        value = self.data.get(coord)
+        if value is None:
+            return [VS.WALL] * 8  # Retorna uma lista com 8 VS.WALL para coordenadas não mapeadas
+        return value[2]
 
         
     def add(self, coord, difficulty, vic_id, actions_res):
