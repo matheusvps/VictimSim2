@@ -1,0 +1,11 @@
+RESULTADOS POR CONFIGURAÇÃO DE CADA ALGORITMO
+
+CART	Precisão	Recall	f-measure	Acuracidade
+Configuração 1	0.855153	0.870000	0.859954	0.870000
+Configuração 2	0.925561	0.926250	0.925831	0.926250
+Configuração 3	0.929597	0.928750	0.928770	0.928750
+
+Redes Neurais	Precisão	Recall	f-measure	Acuracidade
+Configuração 1	0.881953	0.882500	0.881530	0.882500
+Configuração 2	0.912406	0.910000	0.908828	0.910000
+Configuração 3	0.923547	0.922500	0.922752	0.922500

@@ -1046,6 +1046,21 @@ def save_models(cart_class_results, mlp_class_results, cart_reg_results, mlp_reg
     print(f"  MLP Regressor: {mlp_reg_path}")
     print(f"  MLP Regressor Scaler: {mlp_reg_scaler_path}")
 
+def save_config_results_table(cart_results, mlp_results, output_path):
+    """
+    Salva as métricas de cada configuração de CART e Redes Neurais em formato de tabela.
+    """
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write("RESULTADOS POR CONFIGURAÇÃO DE CADA ALGORITMO\n\n")
+        f.write("CART\tPrecisão\tRecall\tf-measure\tAcuracidade\n")
+        for i, res in enumerate(cart_results):
+            m = res['metrics']
+            f.write(f"Configuração {i+1}\t{m['precision']:.6f}\t{m['recall']:.6f}\t{m['f1']:.6f}\t{m['accuracy']:.6f}\n")
+        f.write("\nRedes Neurais\tPrecisão\tRecall\tf-measure\tAcuracidade\n")
+        for i, res in enumerate(mlp_results):
+            m = res['metrics']
+            f.write(f"Configuração {i+1}\t{m['precision']:.6f}\t{m['recall']:.6f}\t{m['f1']:.6f}\t{m['accuracy']:.6f}\n")
+
 def train_all_models(X, y_class, y_reg, class_names):
     """
     Função principal que treina todos os modelos (classificadores e regressores) e retorna os resultados
@@ -1068,7 +1083,7 @@ def train_all_models(X, y_class, y_reg, class_names):
     cart_reg_results, cart_reg_all = train_cart_regressor_configs(X, y_reg)
     mlp_reg_results, mlp_reg_all = train_mlp_regressor_configs(X, y_reg)
     
-    return cart_class_results, mlp_class_results, cart_reg_results, mlp_reg_results
+    return cart_class_results, mlp_class_results, cart_reg_results, mlp_reg_results, cart_class_all, mlp_class_all
 
 def main():
     # Configurações
@@ -1094,7 +1109,7 @@ def main():
     class_names = ['CRÍTICO', 'INSTÁVEL', 'POTENCIALMENTE ESTÁVEL', 'ESTÁVEL']
     
     # Treina todos os modelos
-    cart_class_results, mlp_class_results, cart_reg_results, mlp_reg_results = train_all_models(X, y_class, y_reg, class_names)
+    cart_class_results, mlp_class_results, cart_reg_results, mlp_reg_results, cart_class_all, mlp_class_all = train_all_models(X, y_class, y_reg, class_names)
     
     # Gera análises de explicabilidade
     generate_explainability_analysis(cart_class_results, mlp_class_results, X, y_class, features, class_names, output_dir)
@@ -1110,6 +1125,9 @@ def main():
     
     # Salva os modelos
     save_models(cart_class_results, mlp_class_results, cart_reg_results, mlp_reg_results, output_dir)
+    
+    # Salva a tabela de resultados por configuração
+    save_config_results_table(cart_class_all, mlp_class_all, os.path.join(output_dir, 'classifier_config_results.txt'))
     
     print("\n" + "="*80)
     print("TREINAMENTO CONCLUÍDO COM SUCESSO!")

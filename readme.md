@@ -355,13 +355,6 @@ O treinamento dos modelos de Machine Learning é realizado por meio do script `t
      - `cart_classifier.pkl`, `mlp_classifier.pkl`, `cart_regressor.pkl`, `mlp_regressor.pkl`
      - Scalers correspondentes: `*_scaler.pkl`
 
-### **Execução do Treinamento**
-Para treinar os modelos, execute:
-```sh
-python train_classifier.py
-```
-Certifique-se de ter todas as dependências instaladas (ver `requirements.txt`).
-
 ### **Integração com o Rescuer**
 - O agente Rescuer carrega automaticamente o classificador e o scaler treinados ao iniciar a simulação.
 - As predições de classe de gravidade são feitas usando os sinais vitais das vítimas encontradas.
@@ -395,6 +388,43 @@ A execução do treinamento gera os seguintes arquivos em `mas/models/`:
 - `lime_analysis.txt`: Explicações LIME para instâncias de cada classe.
 
 Esses arquivos documentam todo o processo de treinamento, validação, comparação e explicação dos modelos utilizados pelo sistema. Consulte-os para análise detalhada dos resultados e para integração dos modelos ao sistema multiagente.
+
+### **4. Análise dos Resultados dos Modelos de Classificação**
+
+#### **4.1 Avaliação Quantitativa**
+
+O treinamento dos classificadores CART e Redes Neurais (MLP) foi realizado com três configurações para cada algoritmo. As métricas de desempenho (precisão, recall, f-measure e acurácia) para cada configuração estão detalhadas em `mas/models/classifier_config_results.txt`. Os melhores resultados foram:
+
+- **CART**: Acurácia até 0.9287, f-measure 0.9288
+- **MLP**: Acurácia até 0.9225, f-measure 0.9228
+
+Esses valores indicam que ambos os modelos apresentam excelente desempenho, com leve vantagem para o CART nas configurações mais agressivas.
+
+#### **4.2 Análise de Explicabilidade (LIME/SHAP)**
+
+Foram geradas análises de explicabilidade utilizando LIME e SHAP para os modelos treinados:
+
+- **LIME**: Permitiu identificar quais sinais vitais mais influenciam a decisão do classificador para cada vítima individualmente. Observou-se que variáveis como pulso, respiração e pressão arterial têm maior impacto na classificação.
+- **SHAP**: A análise global de importância de features mostrou que `pulso` e `qPA` são as variáveis mais relevantes para o modelo CART, seguidas por `resp` e `pSist`.
+
+Essas ferramentas aumentam a confiança no modelo, permitindo interpretar e justificar as decisões dos classificadores, especialmente em cenários críticos como o resgate de vítimas.
+
+#### **4.3 Matriz de Confusão**
+
+A matriz de confusão dos melhores modelos mostra que a maioria das vítimas é corretamente classificada em suas respectivas categorias de gravidade. Os poucos erros ocorrem principalmente entre classes vizinhas (ex: INSTÁVEL vs. POTENCIALMENTE ESTÁVEL), o que é esperado devido à proximidade clínica dos casos.
+
+#### **4.4 Justificativa da Escolha do Modelo (Viés e Variância)**
+
+Durante o treinamento, foi observada a seguinte relação entre as configurações:
+
+- **Configurações conservadoras** (menor profundidade/camadas): apresentaram maior viés (underfitting), com acurácia e f-measure mais baixas.
+- **Configurações agressivas** (maior profundidade/camadas): apresentaram menor viés e variância controlada, sem sinais de overfitting (a acurácia de teste se manteve próxima à de validação cruzada).
+
+**CART** foi escolhido como modelo principal devido à sua leve superioridade em desempenho, maior interpretabilidade e robustez frente a variações nos dados. O MLP também apresentou bom desempenho e pode ser utilizado como alternativa, especialmente em cenários onde a flexibilidade do modelo é desejada.
+
+**Resumo da escolha:**
+- **CART**: Preferido por ser mais interpretável, robusto e apresentar leve vantagem nas métricas.
+- **MLP**: Útil como alternativa, especialmente se houver aumento de complexidade dos dados.
 
 ---
 
@@ -574,3 +604,50 @@ class AbstAgent(ABC):
 
 ## 9. Contato
 Dúvidas e sugestões: Matheus Vinicius Passos de Santana (santana.2003@alunos.utfpr.edu.br) e João Pedro Castilho Cardoso
+
+## Visualização dos Resultados
+
+Para visualizar os resultados detalhados dos exploradores, resgatadores e gerais, utilize o script `plot_results.py`.
+
+### Como executar
+
+```bash
+python plot_results.py
+```
+
+### Exemplo de código para plotar os resultados
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Exemplo: Gráfico de vítimas encontradas por cada explorador
+exploradores = {
+    'EXPL_1': {'Críticas': 6, 'Instáveis': 15, 'Pot. Instáveis': 7, 'Estáveis': 4},
+    'EXPL_2': {'Críticas': 8, 'Instáveis': 15, 'Pot. Instáveis': 4, 'Estáveis': 2},
+    'EXPL_3': {'Críticas': 9, 'Instáveis': 12, 'Pot. Instáveis': 6, 'Estáveis': 1},
+    'EXPL_4': {'Críticas': 15, 'Instáveis': 16, 'Pot. Instáveis': 7, 'Estáveis': 4},
+}
+labels = ['Críticas', 'Instáveis', 'Pot. Instáveis', 'Estáveis']
+x = np.arange(len(labels))
+bar_width = 0.18
+fig, ax = plt.subplots(figsize=(10,6))
+for i, (agente, dados) in enumerate(exploradores.items()):
+    valores = [dados[k] for k in labels]
+    ax.bar(x + i*bar_width - 1.5*bar_width, valores, bar_width, label=agente)
+ax.set_ylabel('Vítimas encontradas')
+ax.set_title('Vítimas encontradas por cada explorador')
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+O script completo já gera gráficos para:
+- Vítimas encontradas por explorador (absoluto e percentual)
+- Vítimas salvas por resgatador (absoluto e percentual)
+- Comparativo geral (acumulado) de vítimas no ambiente, encontradas e salvas
+- Gravidade total das vítimas
+
+Adapte os exemplos conforme necessário para sua análise!
