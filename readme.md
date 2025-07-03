@@ -5,6 +5,47 @@ Este projeto implementa um Sistema Multiagente (SMA) para simulação de resgate
 
 ---
 
+## Integração das Partes: Arquitetura do Sistema Multiagente e Dinâmica de Funcionamento
+
+O VictimSim2 implementa um Sistema Multiagente (SMA) para simulação de resgate de vítimas em cenários de desastre. O sistema é composto por dois grupos de agentes artificiais (robôs terrestres): exploradores e socorristas, que atuam de forma sequencial e integrada para localizar e socorrer vítimas em um ambiente dinâmico e parcialmente desconhecido.
+
+### Arquitetura do Sistema
+
+- **Fase 1 – Exploração (4 Exploradores):**
+  - Cada explorador parte de uma direção inicial específica e mapeia uma região do ambiente, localizando vítimas e obstáculos, considerando restrições de bateria.
+  - Os mapas parciais gerados por cada explorador são unificados em um mapa global compartilhado com os socorristas.
+
+- **Fase 2 – Resgate (4 Socorristas):**
+  - Os socorristas recebem o mapa global, agrupam as vítimas (clustering), definem sequências de resgate otimizadas (algoritmos genéticos ou busca local) e realizam o socorro, retornando à base antes do fim da bateria.
+
+- **Integração de Algoritmos:**
+  - O sistema integra algoritmos clássicos de IA (A*, BFS, K-Means, Algoritmo Genético) com técnicas modernas de machine learning (classificação e regressão) e explicabilidade (LIME/SHAP).
+  - O agente Rescuer carrega automaticamente o classificador e o scaler treinados ao iniciar a simulação, utilizando sinais vitais das vítimas para prever a gravidade e priorizar o resgate.
+
+### Dinâmica de Funcionamento
+
+1. Inicialização dos exploradores, cada um com sua configuração e região de atuação.
+2. Exploração paralela do ambiente, com priorização inteligente baseada em mapas de calor e BFS.
+3. Sincronização dos mapas individuais em um mapa global.
+4. Agrupamento das vítimas por proximidade (K-Means adaptado).
+5. Classificação da gravidade das vítimas usando modelos de machine learning treinados.
+6. Distribuição dos clusters de vítimas entre os socorristas.
+7. Sequenciamento otimizado da ordem de resgate (algoritmo genético).
+8. Planejamento de rotas (A* e BFS) para cada socorrista.
+9. Execução paralela do resgate, com cada socorrista seguindo seu plano e retornando à base.
+
+A robustez do sistema é garantida por fallbacks para casos em que os modelos de ML não estejam disponíveis, e a integração entre as partes é feita por meio de arquivos de configuração, mapas globais e modelos salvos.
+
+## Discussão Ética
+
+O sistema pode apresentar viés caso os dados de treinamento dos modelos de machine learning não representem adequadamente todos os tipos de vítimas. A neutralidade da solução depende da qualidade e diversidade dos dados utilizados, bem como da transparência dos modelos.
+
+Situações não previstas, como vítimas com sinais vitais atípicos ou cenários muito diferentes dos dados de treinamento, podem afetar a equidade do resgate, levando a decisões enviesadas ou menos eficazes. Além disso, a priorização automática pode favorecer certos perfis de vítimas em detrimento de outros, caso haja viés nos dados ou nos algoritmos.
+
+Portanto, é fundamental monitorar e atualizar periodicamente os dados e os modelos, além de utilizar ferramentas de explicabilidade (como LIME e SHAP) para justificar as decisões dos agentes e aumentar a confiança no sistema. A solução não é totalmente neutra e pode ser enviesada, especialmente em cenários não abordados nos dados originais. Recomenda-se cautela ao aplicar o sistema em situações reais e a realização de auditorias éticas regulares.
+
+---
+
 ## 1. Arquitetura do Sistema
 
 ### 1.1 Fluxo Geral dos Agentes
@@ -319,7 +360,7 @@ O treinamento dos modelos de Machine Learning é realizado por meio do script `t
 
 ### **Etapas do Treinamento**
 1. **Carregamento dos Dados**
-   - Utiliza datasets localizados em `datasets/` (ex: `data_4000v/env_vital_signals.txt`).
+   - Utiliza datasets localizados em `datasets/` (ex: `data_4000v/env_vital_signs.txt`).
    - Sinais vitais utilizados: `pSist`, `pDiast`, `qPA`, `pulso`, `resp`.
    - Variáveis alvo: `label` (classe de gravidade) para classificação e `grav` (valor contínuo) para regressão.
 
@@ -420,7 +461,7 @@ Durante o treinamento, foi observada a seguinte relação entre as configuraçõ
 - **Configurações conservadoras** (menor profundidade/camadas): apresentaram maior viés (underfitting), com acurácia e f-measure mais baixas.
 - **Configurações agressivas** (maior profundidade/camadas): apresentaram menor viés e variância controlada, sem sinais de overfitting (a acurácia de teste se manteve próxima à de validação cruzada).
 
-**CART** foi escolhido como modelo principal devido à sua leve superioridade em desempenho, maior interpretabilidade e robustez frente a variações nos dados. O MLP também apresentou bom desempenho e pode ser utilizado como alternativa, especialmente em cenários onde a flexibilidade do modelo é desejada.
+**CART** foi escolhido como modelo principal devido à sua leve superioridade em desempenho, maior interpretabilidade e robustez frente a variações nos dados. O MLP também apresentou bom desempenho e pode ser utilizado como alternativa, especialmente se houver aumento de complexidade dos dados.
 
 **Resumo da escolha:**
 - **CART**: Preferido por ser mais interpretável, robusto e apresentar leve vantagem nas métricas.
@@ -651,3 +692,42 @@ O script completo já gera gráficos para:
 - Gravidade total das vítimas
 
 Adapte os exemplos conforme necessário para sua análise!
+
+---
+
+## 3.6 Explicabilidade do Processo Deliberativo
+
+O Sistema Multiagente (SMA) realiza o socorro às vítimas com base em um processo deliberativo fundamentado em crenças, desejos e valorações dos agentes, inspirado no artigo "Why Bad Coffee?". A seguir, explicamos como o sistema toma decisões e como responder às perguntas de explicabilidade:
+
+### Como o SMA decide a ordem de socorro?
+
+- **Crenças:**
+  - O agente resgatista recebe dos exploradores um mapa com as vítimas encontradas e seus sinais vitais.
+  - Cada vítima é classificada quanto à gravidade por um classificador treinado (CART, MLP, etc.), usando sinais vitais como entrada.
+
+- **Desejos:**
+  - O objetivo do agente é maximizar o número de vítimas socorridas no menor tempo possível, respeitando restrições de tempo e acessibilidade.
+
+- **Valorações:**
+  - As vítimas são agrupadas em clusters (proximidade espacial).
+  - Para cada cluster, é calculada uma sequência ótima de resgate usando um Algoritmo Genético, que minimiza o tempo total de deslocamento entre as vítimas.
+  - Se o algoritmo genético falha, a ordem é definida pela proximidade da base (distância Manhattan).
+
+### Perguntas de Explicabilidade
+
+- **Por que o SMA socorreu a vítima X antes da vítima Y?**
+  - Porque, segundo o Algoritmo Genético, a sequência calculada para o cluster ao qual X e Y pertencem resultou em menor tempo total de deslocamento ao socorrer X antes de Y, considerando a posição das vítimas, a gravidade (classificação) e o tempo disponível.
+  - Se o algoritmo genético não encontrou solução, a ordem foi definida pela proximidade da base: X estava mais próxima do ponto de partida do que Y.
+
+- **Por que o SMA decidiu não socorrer a vítima Z?**
+  - Porque, após o planejamento, não foi encontrado um caminho viável até Z dentro do tempo limite disponível, ou o acesso estava bloqueado por obstáculos.
+  - Alternativamente, Z pode ter sido considerada de menor prioridade em relação ao tempo disponível e à gravidade das demais vítimas, ficando fora do plano ótimo de resgate.
+
+### Observações
+
+- Atualmente, o sistema **não possui um método automático que gere explicações textuais para cada decisão**. As justificativas podem ser inferidas a partir dos arquivos de log (`DEBUG`), das sequências salvas (`seq*.txt`) e dos clusters (`cluster*.txt`).
+- A explicabilidade dos modelos de classificação é tratada via LIME/SHAP, explicando a gravidade atribuída a cada vítima.
+
+### Sugestão de melhoria
+
+Para maior transparência, recomenda-se implementar um método que gere explicações automáticas para a ordem de socorro e para vítimas não socorridas, detalhando os critérios utilizados (gravidade, distância, tempo, acessibilidade, etc.).
