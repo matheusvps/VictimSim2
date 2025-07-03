@@ -7,35 +7,110 @@ Este projeto implementa um Sistema Multiagente (SMA) para simulação de resgate
 
 ## 1. Arquitetura do Sistema
 
+### 1.1 Fluxo Geral dos Agentes
+
+O sistema opera em duas fases principais:
+
+**Fase 1 - Exploração (4 Exploradores)**
 - **Exploradores**: Localizam vítimas e constroem mapas parciais do ambiente, considerando restrições de bateria e obstáculos.
 - **Sincronização**: Unificação dos mapas individuais em um único mapa global, compartilhado com os socorristas.
+
+**Fase 2 - Resgate (4 Socorristas)**
 - **Socorristas**: Recebem o mapa unificado, agrupam as vítimas, definem sequências de resgate otimizadas e realizam o socorro, retornando à base antes do fim da bateria.
 
 O sistema integra algoritmos de busca, clustering, otimização (AG ou busca local), classificação e regressão, além de técnicas de explicabilidade (LIME/SHAP).
+
+### 1.2 Configuração dos Agentes
+
+#### Exploradores (4 agentes)
+- **Configuração**: `explorer_1_config.txt` a `explorer_4_config.txt` em `cfg_1/` ou `cfg_2/`
+- **Direções iniciais**: Cada explorador inicia em uma direção específica (0: direita, 2: baixo, 4: esquerda, 6: cima)
+- **Regiões de exploração**: Podem ser definidas por coordenadas Y mínimas e máximas para distribuição do trabalho
+- **Tempo limite**: 5000 unidades (configurável via `TLIM`)
+- **Custos**: Movimento linear (1.0), diagonal (1.5), leitura (2.0), primeiros socorros (1.0)
+
+#### Socorristas (4 agentes)
+- **Configuração**: `rescuer_1_config.txt` a `rescuer_4_config.txt` em `cfg_1/` ou `cfg_2/`
+- **Master Rescuer**: O primeiro socorrista (`rescuer_1`) é responsável por unificar os mapas dos exploradores
+- **Tempo limite**: 1000 unidades (configurável via `TLIM`)
+- **Custos**: Mesmos custos dos exploradores
+- **Clusters**: Cada socorrista recebe um cluster específico de vítimas para resgatar
 
 ---
 
 ## 2. Execução do Sistema
 
-### Cenário de Referência
-- **Grid**: 90x90
-- **Vítimas**: 400
-- **Configuração dos agentes**: `explorer_config.txt` e `rescuer_config.txt` (em `datasets/data_400v_90x90/`)
-- **Dificuldade de acesso**: Intervalo (0, 3], obstáculos intransponíveis = 100 (`VS.OBST_WALL`)
-- **Ambiente dinâmico**: Dificuldades podem variar durante a simulação.
+### 2.1 Cenários Disponíveis
 
-### Como executar
-1. **Configuração**: Ajuste os arquivos de configuração dos agentes conforme desejado.
-2. **Execução**: Utilize os scripts principais em `mas/` ou `run_all_datasets.py` para rodar simulações.
-3. **Resultados**: Saídas são geradas em diretórios específicos, como `Results_300v_90x90_cfg_1/` ou `Results_408v_94x94/`.
+O sistema suporta múltiplos cenários com diferentes configurações:
+
+#### Cenários Padrão
+- **data_10v_12X12**: 10 vítimas em grid 12x12 (teste simples)
+- **data_42v_20x20**: 42 vítimas em grid 20x20 (teste médio)
+- **data_132v_100x80**: 132 vítimas em grid 100x80
+- **data_225v_100x80**: 225 vítimas em grid 100x80
+- **data_300v_90x90**: 300 vítimas em grid 90x90 (cenário de referência)
+- **data_320v_90x90**: 320 vítimas em grid 90x90
+- **data_400v_90x90**: 400 vítimas em grid 90x90
+- **data_408v_94x94**: 408 vítimas em grid 94x94
+- **data_4000v**: Dataset apenas com sinais vitais (para treinamento ML)
+
+#### Configurações de Agentes
+- **cfg_1**: Configuração padrão dos agentes
+- **cfg_2**: Configuração alternativa dos agentes
+
+### 2.2 Como Executar
+
+#### Execução Individual
+```bash
+# Executar um dataset específico
+python mas/main.py datasets/data_300v_90x90 cfg_1
+
+# Executar com configuração alternativa
+python mas/main.py datasets/data_408v_94x94 cfg_2
+```
+
+#### Execução de Múltiplos Datasets
+```bash
+# Executar todos os datasets
+python run_all_datasets.py
+
+# O script permite escolher datasets específicos ou executar todos
+```
+
+#### Treinamento de Modelos ML
+```bash
+# Treinar classificadores e regressores
+python train_classifier.py
+
+# Testar modelos treinados
+python test_ml_models.py
+```
+
+### 2.3 Estrutura de Resultados
+
+Os resultados são organizados em diretórios específicos:
+- **Results_300v_90x90_cfg_1/**: Resultados do cenário de referência
+- **Results_408v_94x94/**: Resultados de cenários específicos
+- **simulation_logs/**: Logs detalhados de todas as simulações
+- **mas/clusters/**: Clusters e sequências gerados durante a execução
 
 ---
 
 ## 3. Componentes e Algoritmos
 
-### 3.1 Exploração
+### 3.1 Exploração - Fluxo Detalhado
 
 O explorador implementa um **algoritmo híbrido inteligente** que combina múltiplas técnicas para maximizar a eficiência na descoberta de vítimas:
+
+#### Inicialização dos Exploradores
+```python
+# Cada explorador é inicializado com:
+- Direção inicial específica (0, 2, 4, 6)
+- Região de exploração (coordenadas Y mín/máx)
+- Mapa individual para construção
+- Fronteira de exploração inicializada com posições adjacentes
+```
 
 #### Algoritmos Utilizados:
 
@@ -47,8 +122,11 @@ O explorador implementa um **algoritmo híbrido inteligente** que combina múlti
 
 **2. Algoritmo de Mapa de Calor (Heat Map)**
 - **Priorização inteligente**: Direciona a exploração para áreas com maior probabilidade de vítimas
-- **Atualização dinâmica**: Células com vítimas recebem pontuação +2.0, células vizinhas +0.5
-- **Penalização gradual**: Células sem vítimas perdem 0.1 pontos, vizinhas perdem 0.05
+- **Atualização dinâmica**: 
+  - Células com vítimas recebem pontuação +2.0
+  - Células vizinhas recebem +0.5
+  - Células sem vítimas perdem 0.1 pontos
+  - Células vizinhas sem vítimas perdem 0.05
 - **Adaptação contínua**: O mapa se ajusta conforme novas vítimas são descobertas
 
 **3. Algoritmo de Detecção de Clusters**
@@ -61,6 +139,31 @@ O explorador implementa um **algoritmo híbrido inteligente** que combina múlti
 - **Cálculo de score**: Combina heat map com distância (score = heat - distância × 0.1)
 - **Seleção adaptativa**: Escolhe a próxima posição baseada em múltiplos critérios
 
+#### Fluxo de Decisão do Explorador
+```python
+def get_next_position(self):
+    if not self.current_path:
+        if not self.frontier:
+            # Procura células não exploradas com maior probabilidade
+            next_pos = self.find_best_unexplored_cell()
+            if next_pos:
+                self.current_path = self.calculate_path_to_position(next_pos)
+                return self.current_path[0] if self.current_path else None
+            return None
+
+        # Ordena a fronteira pelo heat map
+        frontier_list = list(self.frontier)
+        frontier_list.sort(key=lambda x: self.heat_map.get((x[0], x[1]), 0), reverse=True)
+        self.frontier = deque(frontier_list)
+
+        next_x, next_y, path = self.frontier.popleft()
+        self.visited.add((next_x, next_y))
+        self.current_path = path
+        return self.current_path[0]
+
+    return self.current_path.pop(0)
+```
+
 #### Características do Algoritmo Híbrido:
 
 - **Exploração Sistemática**: BFS garante cobertura completa do ambiente
@@ -71,7 +174,30 @@ O explorador implementa um **algoritmo híbrido inteligente** que combina múlti
 - **Retorno Garantido**: Cada explorador retorna à base antes do fim da bateria
 - **Unificação de Mapas**: Mapas individuais são consolidados em um mapa global
 
-### 3.2 Agrupamento de Vítimas (Clustering)
+### 3.2 Resgate - Fluxo Detalhado
+
+#### Inicialização dos Socorristas
+```python
+# Master Rescuer (rescuer_1) é responsável por:
+- Receber mapas de todos os exploradores
+- Unificar informações de vítimas
+- Distribuir clusters entre os socorristas
+
+# Cada Rescuer recebe:
+- Cluster específico de vítimas
+- Mapa unificado do ambiente
+- Tempo limite para resgate
+```
+
+#### Fase 1: Sincronização e Unificação
+```python
+def sync_explorers(self, explorer_map, victims):
+    # Unifica mapas dos exploradores
+    # Consolida informações de vítimas
+    # Distribui clusters entre socorristas
+```
+
+#### Fase 2: Agrupamento de Vítimas (Clustering)
 
 #### Algoritmo K-Means Implementado
 - **Função**: `cluster_victims()` no agente Rescuer
@@ -85,7 +211,19 @@ O explorador implementa um **algoritmo híbrido inteligente** que combina múlti
 - **Arquivos gerados**: `cluster1.txt`, `cluster2.txt`, ... (em `mas/clusters/` ou diretórios de resultados)
 - **Formato**: `id, x, y, grav, classe`
 
-### 3.3 Sequenciamento de Resgate
+#### Fase 3: Classificação de Severidade
+
+#### Machine Learning para Classificação de Severidade
+- **Função**: `predict_severity_and_class()` no agente Rescuer
+- **Propósito**: Classifica a severidade das vítimas usando modelo treinado
+- **Características**:
+  - Carrega classificador pré-treinado (pickle)
+  - Usa scaler para normalização dos dados
+  - Prediz classe de severidade (1=crítico, 2=instável, 3=potencialmente estável, 4=estável)
+  - Fallback para valores aleatórios se modelo não carregar
+  - Baseado em sinais vitais: pSist, pDiast, qPA, pulso, resp
+
+#### Fase 4: Sequenciamento de Resgate
 
 #### Algoritmo Genético Implementado
 - **Função**: `genetic_algorithm()` no agente Rescuer
@@ -104,7 +242,7 @@ O explorador implementa um **algoritmo híbrido inteligente** que combina múlti
 - **Arquivos gerados**: `seq1.txt`, `seq2.txt`, ... (em `mas/clusters/` ou diretórios de resultados)
 - **Formato**: `id, x, y, grav, classe`
 
-### 3.4 Execução do Socorro
+#### Fase 5: Planejamento de Caminhos
 
 #### Algoritmos de Busca de Caminho Implementados
 
@@ -135,19 +273,30 @@ O explorador implementa um **algoritmo híbrido inteligente** que combina múlti
   - Ajustada pela dificuldade mínima do mapa
   - Otimização para ambientes com obstáculos
 
-- Cada socorrista segue a sequência definida, socorrendo o máximo de vítimas possível e retornando à base antes do fim da bateria.
+#### Fase 6: Execução do Socorro
 
-### 3.5 Classificação e Regressão
+Cada socorrista segue a sequência definida, socorrendo o máximo de vítimas possível e retornando à base antes do fim da bateria.
 
-#### Machine Learning para Classificação de Severidade
-- **Função**: `predict_severity_and_class()` no agente Rescuer
-- **Propósito**: Classifica a severidade das vítimas usando modelo treinado
-- **Características**:
-  - Carrega classificador pré-treinado (pickle)
-  - Usa scaler para normalização dos dados
-  - Prediz classe de severidade (1=crítico, 2=instável, 3=potencialmente estável, 4=estável)
-  - Fallback para valores aleatórios se modelo não carregar
-  - Baseado em sinais vitais: pSist, pDiast, qPA, pulso, resp
+### 3.3 Fluxo Completo de Execução
+
+#### Sequência de Processamento
+1. **Inicialização**: 4 exploradores são criados com direções iniciais específicas
+2. **Exploração Paralela**: Cada explorador mapeia sua região usando BFS e heat map
+3. **Sincronização**: Master rescuer unifica mapas de todos os exploradores
+4. **Clustering**: K-Means agrupa vítimas por proximidade geográfica
+5. **Classificação**: ML classifica severidade das vítimas usando modelo treinado
+6. **Distribuição**: Cada cluster é atribuído a um socorrista específico
+7. **Sequenciamento**: Algoritmo genético otimiza ordem de visita das vítimas
+8. **Planejamento**: A* e BFS calculam caminhos entre vítimas
+9. **Execução Paralela**: Cada rescuer segue seu plano calculado e retorna à base
+
+#### Integração dos Algoritmos
+- **Sistema Híbrido**: Combina algoritmos clássicos de IA (A*, BFS, K-Means, Genético) com técnicas modernas de machine learning
+- **Otimização Multi-objetivo**: Maximiza número de vítimas resgatadas minimizando tempo e distância
+- **Adaptação Dinâmica**: Algoritmos se ajustam conforme características do ambiente e número de vítimas
+- **Robustez**: Fallbacks implementados para casos onde modelos ML não estão disponíveis
+
+### 3.4 Classificação e Regressão
 
 #### Modelos Implementados
 - **Classificador**: Estima a classe de gravidade da vítima (1=crítico, 2=instável, 3=potencialmente estável, 4=estável).
@@ -159,28 +308,12 @@ O explorador implementa um **algoritmo híbrido inteligente** que combina múlti
 - **Arquivos de modelos**: Em `mas/models/` (ex: `cart_classifier.pkl`, `mlp_regressor.pkl`)
 - **Relatórios e comparações**: Em `mas/models/` (ex: `algorithm_comparison_report.txt`, `prediction_report.txt`)
 
-### 3.6 Fluxo de Execução dos Algoritmos
-
-#### Sequência de Processamento
-1. **Exploração**: Exploradores mapeiam o ambiente usando BFS e heat map
-2. **Clustering**: K-Means agrupa vítimas por proximidade geográfica
-3. **Classificação**: ML classifica severidade das vítimas usando modelo treinado
-4. **Sequenciamento**: Algoritmo genético otimiza ordem de visita das vítimas
-5. **Planejamento**: A* e BFS calculam caminhos entre vítimas
-6. **Execução**: Rescuer segue o plano calculado e retorna à base
-
-#### Integração dos Algoritmos
-- **Sistema Híbrido**: Combina algoritmos clássicos de IA (A*, BFS, K-Means, Genético) com técnicas modernas de machine learning
-- **Otimização Multi-objetivo**: Maximiza número de vítimas resgatadas minimizando tempo e distância
-- **Adaptação Dinâmica**: Algoritmos se ajustam conforme características do ambiente e número de vítimas
-- **Robustez**: Fallbacks implementados para casos onde modelos ML não estão disponíveis
-
-### 3.7 Explicabilidade
+### 3.5 Explicabilidade
 - **Processo deliberativo**: Implementação inspirada no artigo "Why Bad Coffee?" para justificar decisões de ordem de resgate.
 - **Modelos explicáveis**: LIME/SHAP aplicados aos modelos vencedores para explicar decisões em instâncias de cada classe.
 - **Saídas**: `lime_analysis.txt`, `cart_shap_summary.png` em `mas/models/`
 
-### 3.8 Treinamento dos Modelos de Classificação e Regressão
+### 3.6 Treinamento dos Modelos de Classificação e Regressão
 
 O treinamento dos modelos de Machine Learning é realizado por meio do script `train_classifier.py`, que executa todas as etapas necessárias para gerar classificadores e regressores robustos para o sistema multiagente.
 
@@ -274,6 +407,7 @@ Esses arquivos documentam todo o processo de treinamento, validação, comparaç
 - `tools/` – Scripts auxiliares para geração de dados e análise de resultados
 - `Results_*/` – Resultados de execuções específicas
 - `simulation_logs/` – Logs de simulação
+- `cfg_1/` e `cfg_2/` – Configurações dos agentes
 
 ---
 
