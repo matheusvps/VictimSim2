@@ -109,6 +109,18 @@ class Rescuer(AbstAgent):
         if num_clusters == 0:
             print("DEBUG: Saiu de cluster_victims (zero clusters)")
             return []
+        
+        # Se há poucas vítimas, criar clusters mais equilibrados
+        if num_victims <= 4:
+            clusters = [{} for _ in range(num_clusters)]
+            vic_items = list(vic.items())
+            for i, (key, values) in enumerate(vic_items):
+                cluster_idx = i % num_clusters
+                clusters[cluster_idx][key] = values
+            print("DEBUG: Saiu de cluster_victims (clusters simples)")
+            return clusters
+        
+        # Algoritmo K-means original para muitos dados
         vic_items = list(vic.items())
         centroids = dict(random.sample(vic_items, num_clusters))
         cluster_changed = True
@@ -451,17 +463,9 @@ class Rescuer(AbstAgent):
             sequence[0], sequence[1], ...
             A sequence is a dictionary with the following structure: [vic_id]: ((x,y), [<vs>]"""
 
-        #original placeholder definition:
-
-        #new_sequences = []
-
-        #for seq in self.sequences:   # a list of sequences, being each sequence a dictionary
-            #seq = dict(sorted(seq.items(), key=lambda item: item[1]))
-            #new_sequences.append(seq)       
-            #print(f"{self.NAME} sequence of visit:\n{seq}\n")
-
-        #self.sequences = new_sequences
-
+        print(f"DEBUG: {self.NAME} sequencing - início, self.sequences: {len(self.sequences)} sequências")
+        for i, seq in enumerate(self.sequences):
+            print(f"DEBUG: {self.NAME} sequencing - sequência {i+1}: {len(seq)} vítimas")
 
         new_sequences = []
         map = self.map
@@ -485,8 +489,10 @@ class Rescuer(AbstAgent):
             y = 0
             x += 1
 
+        print(f"DEBUG: {self.NAME} sequencing - min_difficulty: {min_difficulty}")
 
-        for seq in self.sequences:   # a list of sequences, being each sequence a dictionary
+        for seq_idx, seq in enumerate(self.sequences):   # a list of sequences, being each sequence a dictionary
+            print(f"DEBUG: {self.NAME} sequencing - processando sequência {seq_idx+1} com {len(seq)} vítimas")
 
             # Corrigir a montagem do indexed_victims para garantir que (x, y) seja tupla
             indexed_victims = {}
@@ -498,6 +504,7 @@ class Rescuer(AbstAgent):
                 idx += 1
             indexed_victims[0] = ("", (self.plan_x, self.plan_y), "")
             num_victims = len(indexed_victims)
+            print(f"DEBUG: {self.NAME} sequencing - indexed_victims criado com {num_victims} pontos (incluindo base)")
 
             distance_matrix = [[0 for _ in range(num_victims)] for _ in range(num_victims)]
             
@@ -511,43 +518,65 @@ class Rescuer(AbstAgent):
                     distance_matrix[i][j] = distance
                     distance_matrix[j][i] = distance
             
+            print(f"DEBUG: {self.NAME} sequencing - distance_matrix criada, chamando genetic_algorithm")
+            result_sequence = self.genetic_algorithm(indexed_victims, distance_matrix, 100, 50, 0.8, 0.2)
+            print(f"DEBUG: {self.NAME} sequencing - genetic_algorithm retornou sequência com {len(result_sequence)} vítimas")
             
-            new_sequences.append(self.genetic_algorithm(indexed_victims, distance_matrix, 100, 50, 0.8, 0.2))
+            # Fallback: se o algoritmo genético retornou sequência vazia, usar estratégia simples
+            if len(result_sequence) == 0:
+                print(f"DEBUG: {self.NAME} sequencing - algoritmo genético falhou, usando fallback")
+                result_sequence = self.fallback_sequencing(seq)
+                print(f"DEBUG: {self.NAME} sequencing - fallback retornou sequência com {len(result_sequence)} vítimas")
+            
+            new_sequences.append(result_sequence)
         
         self.sequences = new_sequences
+        print(f"DEBUG: {self.NAME} sequencing - fim, self.sequences atualizado com {len(self.sequences)} sequências")
+        for i, seq in enumerate(self.sequences):
+            print(f"DEBUG: {self.NAME} sequencing - sequência final {i+1}: {len(seq)} vítimas")
 
     def planner(self):
-        """ A method that calculates the path between victims: walk actions in a OFF-LINE MANNER (the agent plans, stores the plan, and
-            after it executes. Eeach element of the plan is a pair dx, dy that defines the increments for the the x-axis and  y-axis."""
+        """Calcula o caminho entre as vítimas: ações de caminhada em modo OFF-LINE (o agente planeja, armazena o plano e depois executa). Cada elemento do plano é um par dx, dy que define os incrementos para os eixos x e y."""
 
-
-        # let's instantiate the breadth-first search
         bfs = BFS(self.map, self.COST_LINE, self.COST_DIAG)
 
-        # for each victim of the first sequence of rescue for this agent, we're going go calculate a path
-        # starting at the base - always at (0,0) in relative coords
-        
-        if not self.sequences:   # no sequence assigned to the agent, nothing to do
+        if not self.sequences:
+            print(f"DEBUG: {self.NAME} planner - nenhuma sequência atribuída ao agente")
             return
 
-        # we consider only the first sequence (the simpler case)
-        # The victims are sorted by x followed by y positions: [vic_id]: ((x,y), [<vs>]
+        total_victims_planned = 0
+        total_victims_no_path = 0
+        self.plan = []  # Reinicia o plano
+        self.plan_rtime = self.TLIM  # Reinicia o tempo disponível para planejar
 
-        sequence = self.sequences[0]
-        start = (0,0) # always from starting at the base
-        for vic_id in sequence:
-            goal = sequence[vic_id][0]
+        for seq_idx, sequence in enumerate(self.sequences):
+            if not sequence:
+                print(f"DEBUG: {self.NAME} planner - sequência {seq_idx+1} vazia, pulando")
+                continue
+            start = (0, 0)
+            for vic_id, values in sequence.items():
+                goal = values[0]
+                print(f"DEBUG: {self.NAME} planner - tentando planejar para vítima {vic_id} em {goal} a partir de {start}")
+                plan, time = bfs.search(start, goal, self.plan_rtime)
+                if plan:
+                    print(f"DEBUG: {self.NAME} planner - plano encontrado para vítima {vic_id} ({len(plan)} passos, tempo {time})")
+                    self.plan += plan
+                    self.plan_rtime -= time
+                    start = goal
+                    total_victims_planned += 1
+                else:
+                    print(f"WARNING: {self.NAME} planner - NÃO encontrou caminho para vítima {vic_id} em {goal}")
+                    total_victims_no_path += 1
+            # Planejar retorno à base
+            goal = (0, 0)
             plan, time = bfs.search(start, goal, self.plan_rtime)
-            self.plan = self.plan + plan
-            self.plan_rtime = self.plan_rtime - time
-            start = goal
-
-        # Plan to come back to the base
-        goal = (0,0)
-        plan, time = bfs.search(start, goal, self.plan_rtime)
-        self.plan = self.plan + plan
-        self.plan_rtime = self.plan_rtime - time
-           
+            if plan:
+                print(f"DEBUG: {self.NAME} planner - plano de retorno à base encontrado ({len(plan)} passos, tempo {time})")
+                self.plan += plan
+                self.plan_rtime -= time
+            else:
+                print(f"WARNING: {self.NAME} planner - NÃO encontrou caminho de retorno à base a partir de {start}")
+        print(f"DEBUG: {self.NAME} planner - total de vítimas com plano: {total_victims_planned}, sem caminho: {total_victims_no_path}, tamanho final do plano: {len(self.plan)}")
 
     def sync_explorers(self, explorer_map, victims):
         """ This method should be invoked only to the master agent
@@ -568,6 +597,7 @@ class Rescuer(AbstAgent):
 
         if self.received_maps == self.nb_of_explorers:
             print(f"DEBUG: {self.NAME} all maps received from the explorers")
+            print(f"DEBUG: Total de vítimas encontradas: {len(self.victims)}")
 
             print("DEBUG: Iniciando predict_severity_and_class")
             self.predict_severity_and_class()
@@ -575,7 +605,9 @@ class Rescuer(AbstAgent):
 
             print("DEBUG: Iniciando cluster_victims")
             clusters_of_vic = self.cluster_victims()
-            print("DEBUG: Fim de cluster_victims")
+            print(f"DEBUG: Fim de cluster_victims - {len(clusters_of_vic)} clusters criados")
+            for i, cluster in enumerate(clusters_of_vic):
+                print(f"DEBUG: Cluster {i+1}: {len(cluster)} vítimas")
             
             if not clusters_of_vic:
                 print(f"{self.NAME} No victims found to cluster")
@@ -588,22 +620,44 @@ class Rescuer(AbstAgent):
             num_rescuers = min(4, num_clusters)
             rescuers = [None] * num_rescuers
             rescuers[0] = self
-            self.clusters = [clusters_of_vic[0]]
-
-            for i in range(1, num_rescuers):
-                print(f"DEBUG: Instanciando rescuer {i+1}")
-                filename = f"rescuer_{i+1:1d}_config.txt"
-                config_file = os.path.join(self.config_folder, filename)
-                rescuers[i] = Rescuer(self.get_env(), config_file, 4, [clusters_of_vic[i]])
-                rescuers[i].map = self.map
-                rescuers[i].NAME = f"RESC_{i+1}"
-                print(f"DEBUG: Rescuer {i+1} - clusters: {len(clusters_of_vic[i])} vítimas")
-                self.get_env().add_agent(rescuers[i], VS.ACTIVE)
-                print(f"DEBUG: Rescuer {i+1} adicionado ao ambiente e ativado")
+            
+            # Distribuir clusters de forma mais equilibrada
+            clusters_per_rescuer = num_clusters // num_rescuers
+            remaining_clusters = num_clusters % num_rescuers
+            
+            cluster_idx = 0
+            for i in range(num_rescuers):
+                # Calcular quantos clusters este rescuer deve receber
+                clusters_for_this_rescuer = clusters_per_rescuer
+                if i < remaining_clusters:
+                    clusters_for_this_rescuer += 1
+                
+                # Atribuir clusters a este rescuer
+                rescuer_clusters = clusters_of_vic[cluster_idx:cluster_idx + clusters_for_this_rescuer]
+                cluster_idx += clusters_for_this_rescuer
+                
+                if i == 0:  # RESC_1 (self)
+                    self.clusters = rescuer_clusters
+                    total_victims = sum(len(cluster) for cluster in rescuer_clusters)
+                    print(f"DEBUG: RESC_1 recebeu {len(rescuer_clusters)} clusters com {total_victims} vítimas")
+                else:
+                    print(f"DEBUG: Instanciando rescuer {i+1}")
+                    filename = f"rescuer_{i+1:1d}_config.txt"
+                    config_file = os.path.join(self.config_folder, filename)
+                    rescuers[i] = Rescuer(self.get_env(), config_file, 4, rescuer_clusters)
+                    rescuers[i].map = self.map
+                    rescuers[i].NAME = f"RESC_{i+1}"
+                    total_victims = sum(len(cluster) for cluster in rescuer_clusters)
+                    print(f"DEBUG: Rescuer {i+1} - {len(rescuer_clusters)} clusters com {total_victims} vítimas")
+                    self.get_env().add_agent(rescuers[i], VS.ACTIVE)
+                    print(f"DEBUG: Rescuer {i+1} adicionado ao ambiente e ativado")
 
             self.sequences = self.clusters
 
             for i, rescuer in enumerate(rescuers):
+                if rescuer is None:
+                    continue
+                    
                 print(f"DEBUG: Sequencing rescuer {i+1}")
                 rescuer.sequencing()
                 print(f"DEBUG: Sequencing terminado rescuer {i+1}")
@@ -619,14 +673,14 @@ class Rescuer(AbstAgent):
                 print(f"DEBUG: Planner terminado rescuer {i+1}")
 
                 rescuer.set_state(VS.ACTIVE)
-                print(f"DEBUG: {rescuer.NAME} ativado")
+                print(f"DEBUG: {rescuer.NAME} ativado - plano: {len(rescuer.plan)} passos")
             
             # Ativar também o RESC_1 (self) que não foi ativado no loop acima
             self.set_state(VS.ACTIVE)
             print(f"DEBUG: RESC_1 ativado - plano: {len(self.plan)} passos")
 
     def deliberate(self) -> bool:
-        print(f"DEBUG: {self.NAME} deliberate início - posição=({self.x},{self.y}), plano={self.plan}")
+        print(f"DEBUG: {self.NAME} deliberate início - posição=({self.x},{self.y}), plano={len(self.plan)} passos restantes")
         if not self.plan:
             print(f"{self.NAME} has finished the plan [ENTER]")
             self.set_state(VS.ENDED)
@@ -642,8 +696,39 @@ class Rescuer(AbstAgent):
             if self.map.in_map((self.x, self.y)):
                 vic_id = self.map.get_vic_id((self.x, self.y))
                 if vic_id != VS.NO_VICTIM:
-                    self.first_aid()
+                    print(f"DEBUG: {self.NAME} encontrou vítima {vic_id} em ({self.x},{self.y}) - aplicando primeiros socorros")
+                    result = self.first_aid()
+                    if result:
+                        print(f"DEBUG: {self.NAME} salvou vítima {vic_id} com sucesso!")
+                    else:
+                        print(f"DEBUG: {self.NAME} falhou ao salvar vítima {vic_id}")
         else:
-            print(f"{self.NAME} Plan fail - walk error - agent at ({self.x}, {self.x})")
+            print(f"{self.NAME} Plan fail - walk error - agent at ({self.x}, {self.y})")
         return True
+
+    def fallback_sequencing(self, original_sequence):
+        """Estratégia de fallback quando o algoritmo genético falha.
+        Cria uma sequência simples baseada na distância da base."""
+        
+        if not original_sequence:
+            return {}
+        
+        # Calcular distância de cada vítima da base (0,0)
+        victims_with_distance = []
+        for vic_id, values in original_sequence.items():
+            coord = tuple(values[0])
+            # Distância Manhattan da base
+            distance = abs(coord[0]) + abs(coord[1])
+            victims_with_distance.append((vic_id, values, distance))
+        
+        # Ordenar por distância (mais próximas primeiro)
+        victims_with_distance.sort(key=lambda x: x[2])
+        
+        # Criar nova sequência ordenada
+        fallback_sequence = {}
+        for vic_id, values, distance in victims_with_distance:
+            fallback_sequence[vic_id] = values
+        
+        print(f"DEBUG: {self.NAME} fallback_sequencing - criou sequência com {len(fallback_sequence)} vítimas ordenadas por distância")
+        return fallback_sequence
 

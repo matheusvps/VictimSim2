@@ -32,12 +32,14 @@ class Explorer(AbstAgent):
     """ class attribute """
     MAX_DIFFICULTY = 1             # the maximum degree of difficulty to enter into a cell
     
-    def __init__(self, env, config_file, resc, initial_direction=None):
+    def __init__(self, env, config_file, resc, initial_direction=None, region_min_y=None, region_max_y=None):
         """ Construtor do agente random on-line
         @param env: a reference to the environment 
         @param config_file: the absolute path to the explorer's config file
         @param resc: a reference to the rescuer agent to invoke when exploration finishes
         @param initial_direction: direção inicial do explorador (0-7)
+        @param region_min_y: minimum y coordinate for exploration region
+        @param region_max_y: maximum y coordinate for exploration region
         """
 
         super().__init__(env, config_file)
@@ -59,6 +61,10 @@ class Explorer(AbstAgent):
         self.victim_clusters = []  # clusters de vítimas encontradas
         self.exploration_radius = 5  # raio inicial de exploração
         self.max_radius = 20      # raio máximo de exploração
+        self.region_min_y = region_min_y
+        self.region_max_y = region_max_y
+        
+        print(f"DEBUG: {self.NAME} inicializado com região y: [{region_min_y}, {region_max_y}]")
 
         # put the current position - the base - in the map
         self.map.add((self.x, self.y), 1, VS.NO_VICTIM, self.check_walls_and_lim())
@@ -69,13 +75,18 @@ class Explorer(AbstAgent):
         # Se tiver uma direção inicial, prioriza ela
         if self.initial_direction is not None and obstacles[self.initial_direction] == VS.CLEAR:
             dx, dy = self.AC_INCR[self.initial_direction]
-            self.frontier.append((self.x + dx, self.y + dy, [(dx, dy)]))
+            nx, ny = self.x + dx, self.y + dy
+            if (self.region_min_y is None or ny >= self.region_min_y) and (self.region_max_y is None or ny <= self.region_max_y):
+                self.frontier.append((nx, ny, [(dx, dy)]))
+                print(f"DEBUG: {self.NAME} direção inicial {self.initial_direction} adicionada à fronteira")
         
         # Adiciona as outras direções possíveis
         for i, (dx, dy) in self.AC_INCR.items():
             if i != self.initial_direction and obstacles[i] == VS.CLEAR:
-                self.frontier.append((self.x + dx, self.y + dy, [(dx, dy)]))
-        print(f"DEBUG: {self.NAME} inicialização - fronteira: {list(self.frontier)}")
+                nx, ny = self.x + dx, self.y + dy
+                if (self.region_min_y is None or ny >= self.region_min_y) and (self.region_max_y is None or ny <= self.region_max_y):
+                    self.frontier.append((nx, ny, [(dx, dy)]))
+        print(f"DEBUG: {self.NAME} inicialização - fronteira: {len(self.frontier)} posições")
 
     def update_heat_map(self, x, y, has_victim):
         """ Atualiza o mapa de calor baseado em vítimas encontradas """
@@ -133,11 +144,12 @@ class Explorer(AbstAgent):
                     return self.current_path[0] if self.current_path else None
                 return None
 
-            # Limpa a fronteira de posições já visitadas
+            # Limpa a fronteira de posições já visitadas e fora da região
             cleaned_frontier = deque()
             for item in self.frontier:
                 next_x, next_y, path = item
-                if (next_x, next_y) not in self.visited:
+                if (next_x, next_y) not in self.visited and \
+                   (self.region_min_y is None or next_y >= self.region_min_y) and (self.region_max_y is None or next_y <= self.region_max_y):
                     cleaned_frontier.append(item)
             
             self.frontier = cleaned_frontier
@@ -171,6 +183,8 @@ class Explorer(AbstAgent):
         best_cell = None
 
         for cell in self.unexplored_cells:
+            if (self.region_min_y is not None and cell[1] < self.region_min_y) or (self.region_max_y is not None and cell[1] > self.region_max_y):
+                continue
             heat = self.heat_map.get(cell, 0)
             dist = math.sqrt((cell[0] - self.x)**2 + (cell[1] - self.y)**2)
             score = heat - (dist * 0.1)  # penaliza distância
@@ -328,19 +342,20 @@ class Explorer(AbstAgent):
         time_to_return = self.estimate_time_to_base()
         print(f"DEBUG: {self.NAME} remaining_time={remaining_time}, time_to_return={time_to_return}")
         
-        # Se a fronteira estiver vazia ou walk_time > 200, volta para base
-        if not self.frontier or self.walk_time > 200:
+        # Se a fronteira estiver vazia ou walk_time > 2000, volta para base
+        if not self.frontier or self.walk_time > 2000:
             print(f"DEBUG: {self.NAME} fronteira vazia ou walk_time alto, vai voltar para base")
             self.come_back()
             return True
             
         # Contador de segurança: se explorou muito tempo sem encontrar vítimas, volta
-        if self.walk_time > 150 and len(self.victims) == 0:
+        if self.walk_time > 1500 and len(self.victims) == 0:
             print(f"DEBUG: {self.NAME} explorou muito tempo sem encontrar vítimas, vai voltar para base")
             self.come_back()
             return True
             
-        if remaining_time > time_to_return + 10:
+        # Ser mais agressivo na exploração - só volta se realmente não tiver tempo
+        if remaining_time > time_to_return + 100:
             print(f"DEBUG: {self.NAME} explorando (vai explorar)")
             self.explore()
             return True
