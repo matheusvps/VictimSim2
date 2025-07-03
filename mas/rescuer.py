@@ -99,110 +99,66 @@ class Rescuer(AbstAgent):
                 writer.writerow([id, x, y, vs[6], vs[7]])
 
     def cluster_victims(self):
-        """ this method clusters the victims using the K-Means algorithm
-        
-        @returns: a list of clusters where each cluster is a dictionary in the format [vic_id]: ((x,y), [<vs>])
-                  such as vic_id is the victim id, (x,y) is the victim's position, and [<vs>] the list of vital signals
-                  including the severity value and the corresponding label"""
-
+        print("DEBUG: Entrou em cluster_victims")
         vic = self.victims
-        
-        # Se não há vítimas, retorna lista vazia
         if not vic:
+            print("DEBUG: Saiu de cluster_victims (sem vítimas)")
             return []
-            
-        # Determina o número de clusters baseado no número de vítimas
         num_victims = len(vic)
-        num_clusters = min(4, num_victims)  # Máximo 4 clusters, mas não mais que o número de vítimas
-        
+        num_clusters = min(4, num_victims)
         if num_clusters == 0:
+            print("DEBUG: Saiu de cluster_victims (zero clusters)")
             return []
-
-        #randomize centroids to start up K-Means algorithm
-        # Converte dict_items para lista antes de usar random.sample
         vic_items = list(vic.items())
         centroids = dict(random.sample(vic_items, num_clusters))
-
-        #print("dictionary: ", vic, "\n") #Debugging
-        #print("chosen centroids: ", centroids, "\n")
-
         cluster_changed = True
         number_of_iterations = 4
         i = 0
-        
-    
-        # Divide dictionary into clusters - cria clusters dinamicamente
         clusters = [{} for _ in range(num_clusters)]
-        
-        while (i < number_of_iterations and cluster_changed == True): #Outer loop
+        while (i < number_of_iterations and cluster_changed == True):
             cluster_changed = False
-            
-            # Limpa os clusters para a nova iteração
             for cluster in clusters:
                 cluster.clear()
-
-            for key, values in vic.items():  # values are pairs: ((x,y), [<vital signals list>]), this loop assigns a cluster to each victim
-                
+            for key, values in vic.items():
                 x, y = values[0]
                 min_distance = 1000000000000
-                min_cluster_idx = 0
-
-                for c_key, c_values in centroids.items(): #determines the centroid closest to the current victim
-                    
+                min_key = None
+                for c_key, c_values in centroids.items():
                     c_x, c_y = c_values[0]
-
                     delta_x, delta_y = c_x - x, c_y - y
                     distance = math.sqrt(delta_x**2 + delta_y**2)
-
                     if(distance < min_distance):
                         min_distance = distance
                         min_key = c_key
-                    
                 centroid_keys = list(centroids.keys())
-
-                #Assigns each victim to a cluster based on which centroid they're closest by
                 for idx, centroid_key in enumerate(centroid_keys):
                     if min_key == centroid_key:
                         clusters[idx][key] = values
                         break
-
-            #print(f"Clusters from iteraction:{i}\n") #Debugging
-            #print(f"\n{clusters}")
-
-            j = 0 #tracks in which cluster/centroid we are
-
-            for clusterX in clusters: # Updates each centroid's centers for next iteration, sees if at least one centroid was changed
-                if len(clusterX) == 0:  # Skip empty clusters
+            j = 0
+            for clusterX in clusters:
+                if len(clusterX) == 0:
                     j += 1
                     continue
-                    
                 sum_x = 0
                 sum_y = 0
                 current_key = centroid_keys[j]
-
                 for values in clusterX.values():
                     x, y = values[0]
                     sum_x += x
                     sum_y += y
-
                 c_mean = (sum_x/len(clusterX), sum_y/len(clusterX))
-                #print(f"New c_mean for cluster{j}: {c_mean}") #Debugging
-
-                
                 if(c_mean != centroids[current_key][0]):
                     centroids.update({current_key: (c_mean, centroids[current_key][1])})
                     cluster_changed = True
-
                 j += 1
-            
-            #print(f"New centroids: \n{centroids}\n") #Debugging
             i += 1
-
+        print("DEBUG: Saiu de cluster_victims")
         return clusters
 
     
     def predict_severity_and_class(self):
-        """ Usa o classificador treinado para prever a classe de severidade das vítimas. """
+        print("DEBUG: Entrou em predict_severity_and_class")
         # Carrega o modelo se ainda não foi carregado
         self.__class__.load_model()
         if self.__class__.classifier is None or self.__class__.scaler is None:
@@ -211,6 +167,7 @@ class Rescuer(AbstAgent):
                 severity_value = random.uniform(0.1, 99.9)
                 severity_class = random.randint(1, 4)
                 values[1].extend([severity_value, severity_class])
+            print("DEBUG: Saiu de predict_severity_and_class (fallback)")
             return
 
         for vic_id, values in self.victims.items():
@@ -221,6 +178,7 @@ class Rescuer(AbstAgent):
             # Valor de gravidade: manter aleatório (ou pode-se usar um regressor no futuro)
             severity_value = random.uniform(0.1, 99.9)
             values[1].extend([severity_value, predicted_class])
+        print("DEBUG: Saiu de predict_severity_and_class (normal)")
 
 
     @staticmethod
@@ -331,7 +289,11 @@ class Rescuer(AbstAgent):
         dist_sum = 0
         
         for i in range(len(sequence) - 1):
-            dist_sum += distance_matrix[sequence[i]][sequence[i + 1]]
+            distance = distance_matrix[sequence[i]][sequence[i + 1]]
+            if distance is None or distance == -1:
+                # Se não há caminho válido, retorna um valor muito alto para penalizar esta sequência
+                return float('inf')
+            dist_sum += distance
         
         return dist_sum
         
@@ -388,7 +350,8 @@ class Rescuer(AbstAgent):
                     tourney_candidates = random.sample(starting_population, 3)
                 else:
                     tourney_candidates = starting_population
-                min_fitness = 10000
+                min_fitness = float('inf')
+                winner = None
                 #finds best candidate
                 for candidate in tourney_candidates:
                     fit_test = Rescuer.fitness(candidate, distance_matrix)
@@ -397,6 +360,9 @@ class Rescuer(AbstAgent):
                         winner = candidate
                         min_fitness = fit_test
 
+                # Se não encontrou um vencedor válido, usar o primeiro candidato
+                if winner is None:
+                    winner = tourney_candidates[0]
                             
                 parent_population.append(winner)
                     
@@ -533,13 +499,17 @@ class Rescuer(AbstAgent):
             indexed_victims[0] = ("", (self.plan_x, self.plan_y), "")
             num_victims = len(indexed_victims)
 
-            distance_matrix = [[-1 for _ in range(num_victims)] for _ in range(num_victims)]
+            distance_matrix = [[0 for _ in range(num_victims)] for _ in range(num_victims)]
             
             #fills distance_matrix, each position (x, y) in the matrix is the minimum distance between victims x and y in the map.
             for i in range(num_victims):
                 for j in range(i):
-                    distance_matrix[i][j] = Rescuer.a_star(map, indexed_victims.get(i)[1], indexed_victims.get(j)[1], min_difficulty)
-                    distance_matrix[j][i] = distance_matrix[i][j]
+                    distance = Rescuer.a_star(map, indexed_victims.get(i)[1], indexed_victims.get(j)[1], min_difficulty)
+                    # Se a_star retorna None, usar um valor muito alto para indicar que não há caminho
+                    if distance is None:
+                        distance = float('inf')
+                    distance_matrix[i][j] = distance
+                    distance_matrix[j][i] = distance
             
             
             new_sequences.append(self.genetic_algorithm(indexed_victims, distance_matrix, 100, 50, 0.8, 0.2))
@@ -589,105 +559,91 @@ class Rescuer(AbstAgent):
         Following, using some clustering method, it should group the victims and
         and pass one (or more)clusters to each rescuer """
 
+        print(f"DEBUG: {self.NAME} sync_explorers chamado - received_maps={self.received_maps}, nb_of_explorers={self.nb_of_explorers}")
         self.received_maps += 1
 
-        print(f"{self.NAME} Map received from the explorer")
+        print(f"DEBUG: {self.NAME} Map received from the explorer")
         self.map.update(explorer_map)
         self.victims.update(victims)
 
         if self.received_maps == self.nb_of_explorers:
-            print(f"{self.NAME} all maps received from the explorers")
-            #self.map.draw()
-            #print(f"{self.NAME} found victims by all explorers:\n{self.victims}")
+            print(f"DEBUG: {self.NAME} all maps received from the explorers")
 
-            #@TODO predict the severity and the class of victims' using a classifier
+            print("DEBUG: Iniciando predict_severity_and_class")
             self.predict_severity_and_class()
+            print("DEBUG: Fim de predict_severity_and_class")
 
-            #@TODO cluster the victims possibly using the severity and other criteria
-            # Here, there 4 clusters
+            print("DEBUG: Iniciando cluster_victims")
             clusters_of_vic = self.cluster_victims()
+            print("DEBUG: Fim de cluster_victims")
             
-            # Se não há clusters, não há nada para fazer
             if not clusters_of_vic:
                 print(f"{self.NAME} No victims found to cluster")
                 return
 
             for i, cluster in enumerate(clusters_of_vic):
-                self.save_cluster_csv(cluster, i+1)    # file names start at 1
-  
-            # Determina quantos rescuers precisamos baseado no número de clusters
+                self.save_cluster_csv(cluster, i+1)
+
             num_clusters = len(clusters_of_vic)
-            num_rescuers = min(4, num_clusters)  # Máximo 4 rescuers
-            
-            # Instantiate the other rescuers
+            num_rescuers = min(4, num_clusters)
             rescuers = [None] * num_rescuers
-            rescuers[0] = self                    # the master rescuer is the index 0 agent
+            rescuers[0] = self
+            self.clusters = [clusters_of_vic[0]]
 
-            # Assign the cluster the master agent is in charge of 
-            self.clusters = [clusters_of_vic[0]]  # the first one
-
-            # Instantiate the other rescuers and assign the clusters to them
-            for i in range(1, num_rescuers):    
-                #print(f"{self.NAME} instantianting rescuer {i+1}, {self.get_env()}")
+            for i in range(1, num_rescuers):
+                print(f"DEBUG: Instanciando rescuer {i+1}")
                 filename = f"rescuer_{i+1:1d}_config.txt"
                 config_file = os.path.join(self.config_folder, filename)
-                # each rescuer receives one cluster of victims
-                rescuers[i] = Rescuer(self.get_env(), config_file, 4, [clusters_of_vic[i]]) 
-                rescuers[i].map = self.map     # each rescuer have the map
+                rescuers[i] = Rescuer(self.get_env(), config_file, 4, [clusters_of_vic[i]])
+                rescuers[i].map = self.map
+                rescuers[i].NAME = f"RESC_{i+1}"
+                print(f"DEBUG: Rescuer {i+1} - clusters: {len(clusters_of_vic[i])} vítimas")
+                self.get_env().add_agent(rescuers[i], VS.ACTIVE)
+                print(f"DEBUG: Rescuer {i+1} adicionado ao ambiente e ativado")
 
-            
-            # Calculate the sequence of rescue for each agent
-            # In this case, each agent has just one cluster and one sequence
-            self.sequences = self.clusters         
+            self.sequences = self.clusters
 
-            # For each rescuer, we calculate the rescue sequence 
             for i, rescuer in enumerate(rescuers):
-                rescuer.sequencing()         # the sequencing will reorder the cluster
-                
+                print(f"DEBUG: Sequencing rescuer {i+1}")
+                rescuer.sequencing()
+                print(f"DEBUG: Sequencing terminado rescuer {i+1}")
+
                 for j, sequence in enumerate(rescuer.sequences):
                     if j == 0:
-                        self.save_sequence_csv(sequence, i+1)              # primeira sequencia do 1o. cluster 1: seq1 
+                        self.save_sequence_csv(sequence, i+1)
                     else:
-                        self.save_sequence_csv(sequence, (i+1)+ j*10)      # demais sequencias do 1o. cluster: seq11, seq12, seq13, ...
+                        self.save_sequence_csv(sequence, (i+1)+ j*10)
 
+                print(f"DEBUG: Planner rescuer {i+1}")
+                rescuer.planner()
+                print(f"DEBUG: Planner terminado rescuer {i+1}")
+
+                rescuer.set_state(VS.ACTIVE)
+                print(f"DEBUG: {rescuer.NAME} ativado")
             
-                rescuer.planner()            # make the plan for the trajectory
-                rescuer.set_state(VS.ACTIVE) # from now, the simulator calls the deliberation method
+            # Ativar também o RESC_1 (self) que não foi ativado no loop acima
+            self.set_state(VS.ACTIVE)
+            print(f"DEBUG: RESC_1 ativado - plano: {len(self.plan)} passos")
 
     def deliberate(self) -> bool:
-        """ This is the choice of the next action. The simulator calls this
-        method at each reasonning cycle if the agent is ACTIVE.
-        Must be implemented in every agent
-        @return True: there's one or more actions to do
-        @return False: there's no more action to do """
+        print(f"DEBUG: {self.NAME} deliberate início - posição=({self.x},{self.y}), plano={self.plan}")
+        if not self.plan:
+            print(f"{self.NAME} has finished the plan [ENTER]")
+            self.set_state(VS.ENDED)
+            return False
 
-        # No more actions to do
-        if self.plan == []:  # empty list, no more actions to do
-           print(f"{self.NAME} has finished the plan [ENTER]")
-           return False
-
-        # Takes the first action of the plan (walk action) and removes it from the plan
+        dx, dy = self.plan[0]
+        print(f"DEBUG: {self.NAME} vai andar dx={dx}, dy={dy}")
         dx, dy = self.plan.pop(0)
-        #print(f"{self.NAME} pop dx: {dx} dy: {dy} ")
-
-        # Walk - just one step per deliberation
         walked = self.walk(dx, dy)
-
-        # Rescue the victim at the current position
         if walked == VS.EXECUTED:
             self.x += dx
             self.y += dy
-            #print(f"{self.NAME} Walk ok - Rescuer at position ({self.x}, {self.y})")
-
-            # check if there is a victim at the current position
             if self.map.in_map((self.x, self.y)):
                 vic_id = self.map.get_vic_id((self.x, self.y))
                 if vic_id != VS.NO_VICTIM:
                     self.first_aid()
-                    #if self.first_aid(): # True when rescued
-                        #print(f"{self.NAME} Victim rescued at ({self.x}, {self.y})")                    
         else:
             print(f"{self.NAME} Plan fail - walk error - agent at ({self.x}, {self.x})")
-            
         return True
 

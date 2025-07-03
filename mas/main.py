@@ -2,6 +2,12 @@ import sys
 import os
 import time
 
+# Adiciona o diretório atual ao path para encontrar os módulos
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+sys.path.insert(0, current_dir)
+
 ## importa classes
 from vs.environment import Env
 from explorer import Explorer

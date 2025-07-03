@@ -75,6 +75,7 @@ class Explorer(AbstAgent):
         for i, (dx, dy) in self.AC_INCR.items():
             if i != self.initial_direction and obstacles[i] == VS.CLEAR:
                 self.frontier.append((self.x + dx, self.y + dy, [(dx, dy)]))
+        print(f"DEBUG: {self.NAME} inicialização - fronteira: {list(self.frontier)}")
 
     def update_heat_map(self, x, y, has_victim):
         """ Atualiza o mapa de calor baseado em vítimas encontradas """
@@ -132,16 +133,29 @@ class Explorer(AbstAgent):
                     return self.current_path[0] if self.current_path else None
                 return None
 
+            # Limpa a fronteira de posições já visitadas
+            cleaned_frontier = deque()
+            for item in self.frontier:
+                next_x, next_y, path = item
+                if (next_x, next_y) not in self.visited:
+                    cleaned_frontier.append(item)
+            
+            self.frontier = cleaned_frontier
+            
+            if not self.frontier:
+                # Se não há mais posições válidas na fronteira
+                next_pos = self.find_best_unexplored_cell()
+                if next_pos:
+                    self.current_path = self.calculate_path_to_position(next_pos)
+                    return self.current_path[0] if self.current_path else None
+                return None
+
             # Ordena a fronteira pelo heat map
             frontier_list = list(self.frontier)
             frontier_list.sort(key=lambda x: self.heat_map.get((x[0], x[1]), 0), reverse=True)
             self.frontier = deque(frontier_list)
 
             next_x, next_y, path = self.frontier.popleft()
-
-            if (next_x, next_y) in self.visited:
-                return self.get_next_position()
-
             self.visited.add((next_x, next_y))
             self.current_path = path
             return self.current_path[0]
@@ -200,13 +214,12 @@ class Explorer(AbstAgent):
         return None
 
     def explore(self):
+        print(f"DEBUG: {self.NAME} explore chamado - posição atual: ({self.x},{self.y}) - fronteira: {list(self.frontier)}")
         next_move = self.get_next_position()
-        
         if next_move is None:
+            print(f"DEBUG: {self.NAME} explore - next_move é None")
             return
-            
         dx, dy = next_move
-
         rtime_bef = self.get_rtime()
         result = self.walk(dx, dy)
         rtime_aft = self.get_rtime()
@@ -242,23 +255,52 @@ class Explorer(AbstAgent):
                 new_x = self.x + dx
                 new_y = self.y + dy
                 if obstacles[i] == VS.CLEAR and (new_x, new_y) not in self.visited:
-                    new_path = [(dx, dy)]
-                    self.frontier.append((new_x, new_y, new_path))
-                    self.unexplored_cells.add((new_x, new_y))
+                    # Verifica se a posição já está na fronteira para evitar duplicatas
+                    already_in_frontier = False
+                    for item in self.frontier:
+                        if item[0] == new_x and item[1] == new_y:
+                            already_in_frontier = True
+                            break
+                    
+                    if not already_in_frontier:
+                        new_path = [(dx, dy)]
+                        self.frontier.append((new_x, new_y, new_path))
+                        self.unexplored_cells.add((new_x, new_y))
 
     def come_back(self):
-        """ Volta para a base usando o caminho mais curto """
+        print(f"DEBUG: {self.NAME} tentando voltar para base de ({self.x},{self.y})")
         if not self.base_path:
+            print(f"DEBUG: {self.NAME} calculando novo caminho para base")
             # Se não tiver caminho para a base, calcula um novo
             self.calculate_path_to_base()
-            
         if self.base_path:
+            print(f"DEBUG: {self.NAME} base_path: {self.base_path}")
             dx, dy = self.base_path.pop(0)
+            print(f"DEBUG: {self.NAME} vai andar dx={dx}, dy={dy}")
             result = self.walk(dx, dy)
-            
             if result == VS.EXECUTED:
                 self.x += dx
                 self.y += dy
+                print(f"DEBUG: {self.NAME} moveu para ({self.x},{self.y})")
+            else:
+                print(f"DEBUG: {self.NAME} não conseguiu andar, recalculando caminho")
+                self.base_path = []
+        else:
+            print(f"DEBUG: {self.NAME} não conseguiu calcular caminho para base")
+            
+        # Se chegou na base, chama sync_explorers e finaliza
+        if self.x == 0 and self.y == 0:
+            print(f"DEBUG: {self.NAME} chegou na base e vai chamar sync_explorers")
+            self.resc.sync_explorers(self.map, self.victims)
+            print(f"DEBUG: {self.NAME} chamou sync_explorers")
+            self.set_state(VS.ENDED)
+            return False
+
+    def estimate_time_to_base(self):
+        """ Estima o tempo necessário para voltar para a base """
+        manhattan_dist = abs(self.x) + abs(self.y)
+        estimated_time = manhattan_dist * self.COST_LINE
+        return estimated_time
 
     def calculate_path_to_base(self):
         """ Calcula o caminho mais curto para a base usando BFS """
@@ -281,22 +323,41 @@ class Explorer(AbstAgent):
                         queue.append((new_x, new_y, path + [(dx, dy)]))
         
     def deliberate(self) -> bool:
-        """ The agent chooses the next action. The simulator calls this
-        method at each cycle. Must be implemented in every agent"""
-
-        # Se ainda tiver tempo para explorar
-        if self.walk_time < (self.get_rtime() - 2*self.COST_DIAG):
+        print(f"DEBUG: {self.NAME} deliberate início - posição ({self.x},{self.y}) - walk_time={self.walk_time} - rtime={self.get_rtime()}")
+        remaining_time = self.get_rtime()
+        time_to_return = self.estimate_time_to_base()
+        print(f"DEBUG: {self.NAME} remaining_time={remaining_time}, time_to_return={time_to_return}")
+        
+        # Se a fronteira estiver vazia ou walk_time > 200, volta para base
+        if not self.frontier or self.walk_time > 200:
+            print(f"DEBUG: {self.NAME} fronteira vazia ou walk_time alto, vai voltar para base")
+            self.come_back()
+            return True
+            
+        # Contador de segurança: se explorou muito tempo sem encontrar vítimas, volta
+        if self.walk_time > 150 and len(self.victims) == 0:
+            print(f"DEBUG: {self.NAME} explorou muito tempo sem encontrar vítimas, vai voltar para base")
+            self.come_back()
+            return True
+            
+        if remaining_time > time_to_return + 10:
+            print(f"DEBUG: {self.NAME} explorando (vai explorar)")
             self.explore()
             return True
-
-        # Se já estiver na base
-        if self.x == 0 and self.y == 0:
-            # time to pass the map and found victims to the master rescuer
-            self.resc.sync_explorers(self.map, self.victims)
-            # finishes the execution of this agent
-            return False
-        
-        # proceed to the base
+        # Se não pode mais explorar, tenta voltar para base
+        print(f"DEBUG: {self.NAME} voltando para base (vai voltar)")
         self.come_back()
         return True
+
+    def walk(self, dx, dy):
+        print(f"DEBUG: {self.NAME} walk chamado - posição ({self.x},{self.y}), dx={dx}, dy={dy}, walk_time antes={self.walk_time}")
+        result = super().walk(dx, dy)
+        # Incrementa o tempo de caminhada
+        if result == VS.EXECUTED:
+            if abs(dx) == 1 and abs(dy) == 1:
+                self.walk_time += self.COST_DIAG
+            else:
+                self.walk_time += self.COST_LINE
+            print(f"DEBUG: {self.NAME} walk_time depois={self.walk_time}")
+        return result
 
